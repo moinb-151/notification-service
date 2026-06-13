@@ -1,9 +1,20 @@
 import zoneinfo
 
 import uuid_utils.compat as uuid
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.db import models
+
+
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Email is required")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
 
 
 def generate_uuid7():
@@ -16,6 +27,8 @@ def get_timezone_choices():
 
 
 class User(AbstractUser):
+    username = None
+    objects = UserManager()
     id = models.UUIDField(primary_key=True, default=generate_uuid7, editable=False)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, unique=True, null=True, blank=True)
