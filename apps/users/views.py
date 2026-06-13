@@ -6,6 +6,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from .models import User
 from .serializers import LoginSerializer, UserRegistrationSerializer
 from .utils import _set_auth_cookie
 
@@ -61,6 +62,7 @@ class RefreshView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        print(request.COOKIES)
         refresh_token = request.COOKIES.get("refresh_token")
 
         if not refresh_token:
@@ -70,6 +72,7 @@ class RefreshView(APIView):
 
         try:
             old_refresh_token = RefreshToken(refresh_token)
+            user_id = old_refresh_token.get("user_id")
             old_refresh_token.blacklist()
         except TokenError:
             return Response(
@@ -77,7 +80,14 @@ class RefreshView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        new_refresh_token = RefreshToken.for_user(old_refresh_token.get("user_id"))
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_refresh_token = RefreshToken.for_user(user)
         access_token = str(new_refresh_token.access_token)
 
         response = Response(
@@ -122,8 +132,14 @@ class LogoutView(APIView):
             response.delete_cookie(
                 key=key,
                 path="/",
-                domain=settings.SIMPLE_JWT.get("AUTH_COOKIE_DOMAIN"),
                 samesite="Strict",
             )
 
         return response
+
+
+class AuthView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response({"message": "Welcome"})
