@@ -13,18 +13,19 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         model = User
         fields = ["email", "password", "password_confirmation"]
 
-    def validate_data(self, data):
-        if data["password"] != data["password_confirmation"]:
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirmation"]:
             raise serializers.ValidationError("Passwords do not match.")
-        return data
+        return attrs
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
         validated_data.pop("password_confirmation")
-        user = User.objects.create(**validated_data)
-        user.set_password(password)
-        user.save()
-        return user
+        return User.objects.create_user(**validated_data)
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -32,5 +33,5 @@ class LoginSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         user_data = UserRegistrationSerializer(self.user).data
         message = "Login successfull"
-        data.update({"user": user_data, "message": message})
+        data.update({"message": message, "user": user_data})
         return data
