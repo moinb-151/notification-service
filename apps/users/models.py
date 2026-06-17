@@ -44,6 +44,9 @@ class User(AbstractUser):
             models.Index(fields=["updated_at"]),
         ]
 
+    def __str__(self):
+        return self.email
+
 
 class NotificationPreference(models.Model):
     class CHANNEL_TYPES(models.TextChoices):

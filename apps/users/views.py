@@ -62,12 +62,11 @@ class RefreshView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        print(request.COOKIES)
         refresh_token = request.COOKIES.get("refresh_token")
 
         if not refresh_token:
             return Response(
-                {"error": "Refresh token not found"}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "Refresh token not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         try:
@@ -76,7 +75,7 @@ class RefreshView(APIView):
             old_refresh_token.blacklist()
         except TokenError:
             return Response(
-                {"error": "Invalid or expired refresh token"},
+                {"detail": "Invalid or expired refresh token"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
@@ -84,7 +83,7 @@ class RefreshView(APIView):
             user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
-                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
+                {"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         new_refresh_token = RefreshToken.for_user(user)
