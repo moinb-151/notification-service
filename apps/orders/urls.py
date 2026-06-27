@@ -1,13 +1,21 @@
 from django.urls import path
 
-from .views import ProductListCreateView, ProductRetrieveUpdateDestroyView
+from .views import (
+    OrderCancelView,
+    OrderDetailView,
+    OrderListCreateView,
+    ProductDetailView,
+    ProductListCreateView,
+)
 
 urlpatterns = [
     path("products/", ProductListCreateView.as_view(), name="list-create-product"),
     path(
         "products/<uuid:product_id>/",
-        ProductRetrieveUpdateDestroyView.as_view(),
-        name="product-detail-view",
+        ProductDetailView.as_view(),
+        name="product-details",
     ),
-    # path("products/list/", ProductListView.as_view(), name="list-product"),
+    path("", OrderListCreateView.as_view(), name="list-create-order"),
+    path("<uuid:order_id>/", OrderDetailView.as_view(), name="order-details"),
+    path("<uuid:order_id>/cancel/", OrderCancelView.as_view(), name="cancel-order"),
 ]
