@@ -1,6 +1,8 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from common.choices import ChannelType
+
 from .models import NotificationPreference, User
 
 
@@ -11,6 +13,6 @@ def seed_notification_preference(sender, instance, created, **kwargs):
     NotificationPreference.objects.bulk_create(
         [
             NotificationPreference(user=instance, channel=value)
-            for value, _ in NotificationPreference.CHANNEL_TYPES.choices
+            for value, _ in ChannelType.choices
         ]
     )

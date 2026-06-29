@@ -5,6 +5,8 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from common.choices import ChannelType
+
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
@@ -49,15 +51,10 @@ class User(AbstractUser):
 
 
 class NotificationPreference(models.Model):
-    class CHANNEL_TYPES(models.TextChoices):
-        EMAIL = "email", "Email"
-        SMS = "sms", "SMS"
-        PUSH = "push", "Push Notification"
-
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="notification_preference"
     )
-    channel = models.CharField(max_length=20, choices=CHANNEL_TYPES.choices)
+    channel = models.CharField(max_length=20, choices=ChannelType.choices)
     enabled = models.BooleanField(default=True)
     timezone = models.CharField(
         max_length=50, choices=get_timezone_choices(), default="UTC"
