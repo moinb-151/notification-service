@@ -2,8 +2,9 @@ import uuid_utils.compat as uuid
 from django.contrib.auth import get_user_model
 from django.db import models
 
-from ..orders.models import Order
 from common.choices import ChannelType
+
+from ..orders.models import Order
 
 User = get_user_model()
 
@@ -41,10 +42,12 @@ class Notification(models.Model):
     idempotency_key = models.CharField(max_length=128, unique=True)
     payload = models.JSONField(default=dict, blank=True)
     provider_message_id = models.CharField(max_length=255, null=True, blank=True)
+    is_read = models.BooleanField(default=False)
     attempts = models.PositiveSmallIntegerField(default=0)
     last_attempted_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         indexes = [
