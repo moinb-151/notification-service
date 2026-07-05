@@ -204,7 +204,9 @@ class NotificationService:
 class NotificationPreferenceService:
     @staticmethod
     def get_preferences(user):
-        preferences = NotificationPreference.objects.filter(user=user)
+        preferences = NotificationPreference.objects.filter(user=user).select_related(
+            "user"
+        )
         return preferences
 
     @staticmethod
