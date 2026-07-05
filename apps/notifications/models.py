@@ -43,6 +43,7 @@ class Notification(models.Model):
     payload = models.JSONField(default=dict, blank=True)
     provider_message_id = models.CharField(max_length=255, null=True, blank=True)
     is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)
     last_attempted_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
