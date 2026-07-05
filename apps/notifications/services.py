@@ -4,9 +4,10 @@ from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from ..users.models import NotificationPreference
-from .models import Notification, NotificationStatus
+from .models import Notification, NotificationStatus, NotificationTemplate
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,23 @@ class NotificationService:
             .select_related("user")
             .first()
         )
+
+    @staticmethod
+    @transaction.atomic
+    def update_notification(user, notification_id, validated_data):
+        try:
+            notification = Notification.objects.select_for_update().get(
+                id=notification_id,
+                user=user,
+            )
+
+            for field, value in validated_data.items():
+                setattr(notification, field, value)
+
+            notification.save(update_fields=validated_data.keys())
+            return notification
+        except Notification.DoesNotExist:
+            return None
 
     @staticmethod
     def _is_channel_enabled(user, channel):
@@ -122,7 +140,8 @@ class NotificationService:
             if notification.is_read:
                 return notification
             notification.is_read = True
-            notification.save(update_fields=["is_read"])
+            notification.read_at = timezone.now()
+            notification.save(update_fields=["is_read", "read_at"])
             return notification
         except Notification.DoesNotExist:
             return None
@@ -180,3 +199,61 @@ class NotificationService:
 
         except Notification.DoesNotExist:
             return None
+
+
+class NotificationPreferenceService:
+    @staticmethod
+    def get_preferences(user):
+        preferences = NotificationPreference.objects.filter(user=user)
+        return preferences
+
+    @staticmethod
+    @transaction.atomic
+    def update_preference(user, preference_id, validated_data):
+        try:
+            preference = NotificationPreference.objects.select_for_update().get(
+                id=preference_id,
+                user=user,
+            )
+
+            for field, value in validated_data.items():
+                setattr(preference, field, value)
+
+            preference.save(update_fields=validated_data.keys())
+
+            return preference
+        except NotificationPreference.DoesNotExist:
+            return None
+
+    @staticmethod
+    @transaction.atomic
+    def replace_preferences(user, preferences_data):
+        preferences = NotificationPreference.objects.select_for_update().filter(
+            user=user
+        )
+
+        preference_map = {preference.channel: preference for preference in preferences}
+
+        modified_preferences = []
+
+        for data in preferences_data:
+            preference = preference_map.get(data["channel"])
+
+            if preference is None:
+                raise ValidationError(
+                    {"channel": f"Invalid channel: {data['channel']}"}
+                )
+
+            for field in ("enabled", "quiet_start", "quiet_end"):
+                if field in data:
+                    setattr(preference, field, data[field])
+
+            modified_preferences.append(preference)
+
+        if modified_preferences:
+            NotificationPreference.objects.bulk_update(
+                modified_preferences,
+                ["enabled", "quiet_start", "quiet_end"],
+            )
+
+        return modified_preferences
