@@ -2,6 +2,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.users.models import NotificationPreference
+
 from .models import Notification
 from .serializers import NotificationPreferenceSerializer, NotificationSerializer
 from .services import NotificationPreferenceService, NotificationService
@@ -60,10 +62,10 @@ class NotificationView(APIView):
         )
 
 
-class NotificationPreferenceListView(generics.ListAPIView):
+class NotificationPreferenceListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = NotificationPreferenceSerializer
 
-    def get_queryset(self):
-        return NotificationPreferenceService.get_preferences(self.request.user)
-
+    def get(self, request):
+        preferences = NotificationPreferenceService.get_preferences(request.user)
+        preferences_data = NotificationPreferenceSerializer(preferences, many=True).data
+        return Response(preferences_data, status=status.HTTP_200_OK)
