@@ -2,10 +2,12 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.users.models import NotificationPreference
-
-from .models import Notification
-from .serializers import NotificationPreferenceSerializer, NotificationSerializer
+from .serializers import (
+    NotificationPreferenceBulkUpdateSerializer,
+    NotificationPreferenceSerializer,
+    NotificationPreferenceUpdateSerializer,
+    NotificationSerializer,
+)
 from .services import NotificationPreferenceService, NotificationService
 
 
@@ -69,3 +71,55 @@ class NotificationPreferenceListView(APIView):
         preferences = NotificationPreferenceService.get_preferences(request.user)
         preferences_data = NotificationPreferenceSerializer(preferences, many=True).data
         return Response(preferences_data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        serializer = NotificationPreferenceBulkUpdateSerializer(
+            data=request.data,
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        preferences = NotificationPreferenceService.replace_preferences(
+            user=request.user,
+            preferences_data=serializer.validated_data["preferences"],
+        )
+
+        response_serializer = NotificationPreferenceSerializer(
+            preferences,
+            many=True,
+        )
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class NotificationPreferenceView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, channel):
+        serializer = NotificationPreferenceUpdateSerializer(
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        preference = NotificationPreferenceService.update_preference(
+            user=request.user,
+            channel=channel,
+            validated_data=serializer.validated_data,
+        )
+
+        if preference is None:
+            return Response(
+                {"detail": "Notification preference not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        response_serializer = NotificationPreferenceSerializer(preference)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK,
+        )

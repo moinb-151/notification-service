@@ -41,9 +41,41 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
-    user = UserRegistrationSerializer()
+    user = UserRegistrationSerializer(read_only=True)
 
     class Meta:
         model = NotificationPreference
-        fields = "__all__"
-        read_only_fields = ["id", "quiet_start", "quiet_end"]
+        fields = [
+            "id",
+            "user",
+            "channel",
+            "enabled",
+            "quiet_start",
+            "quiet_end",
+        ]
+        read_only_fields = fields
+
+
+class NotificationPreferenceUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            "enabled",
+            "quiet_start",
+            "quiet_end",
+        ]
+
+
+class NotificationPreferenceUpdateItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            "channel",
+            "enabled",
+            "quiet_start",
+            "quiet_end",
+        ]
+
+
+class NotificationPreferenceBulkUpdateSerializer(serializers.Serializer):
+    preferences = NotificationPreferenceUpdateItemSerializer(many=True)

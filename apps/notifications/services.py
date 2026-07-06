@@ -211,10 +211,10 @@ class NotificationPreferenceService:
 
     @staticmethod
     @transaction.atomic
-    def update_preference(user, preference_id, validated_data):
+    def update_preference(user, channel, validated_data):
         try:
             preference = NotificationPreference.objects.select_for_update().get(
-                id=preference_id,
+                channel=channel,
                 user=user,
             )
 
