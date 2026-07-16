@@ -259,3 +259,12 @@ class NotificationPreferenceService:
             )
 
         return modified_preferences
+
+class NotificationTemplateService:
+    @staticmethod
+    def get_template(event_type, channel):
+        return NotificationTemplate.objects.filter(event_type=event_type, channel=channel).first()
+
+    @staticmethod
+    def render(template, context):
+        pass
