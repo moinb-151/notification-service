@@ -17,6 +17,7 @@ dependencies = [
     "psycopg2-binary>=2.9.12",
     "python-decouple>=3.8",
     "redis>=8.0.1",
+    "requests>=2.34.2",
     "uuid-utils>=0.16.0",
 ]
 
