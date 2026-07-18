@@ -19,6 +19,13 @@ class NotificationStatus(models.TextChoices):
     FAILED = "failed", "Failed"
     SUPPRESSED = "suppressed", "Suppressed"
 
+class NotificationEventType(models.TextChoices):
+    ORDER_CREATED = "ORDER_CREATED", "Order Created"
+    ORDER_CANCELLED = "ORDER_CANCELLED", "Order Cancelled"
+    ORDER_SHIPPED = "ORDER_SHIPPED", "Order Shipped"
+    PAYMENT_SUCCESS = "PAYMENT_SUCCESS", "Payment Success"
+    PAYMENT_FAILED = "PAYMENT_FAILED", "Payment Failed"
+
 
 class Notification(models.Model):
     id = models.UUIDField(primary_key=True, default=generate_uuid7, editable=False)
@@ -33,7 +40,7 @@ class Notification(models.Model):
         blank=True,
     )
     channel = models.CharField(max_length=20, choices=ChannelType.choices)
-    event_type = models.CharField(max_length=64)
+    event_type = models.CharField(max_length=64, choices=NotificationEventType.choices)
     status = models.CharField(
         max_length=20,
         choices=NotificationStatus.choices,
@@ -67,7 +74,7 @@ class Notification(models.Model):
 
 class NotificationTemplate(models.Model):
     id = models.UUIDField(primary_key=True, default=generate_uuid7, editable=False)
-    event_type = models.CharField(max_length=64)
+    event_type = models.CharField(max_length=64, choices=NotificationEventType.choices)
     channel = models.CharField(max_length=20, choices=ChannelType.choices)
     subject = models.CharField(max_length=255, blank=True)
     body_template = models.TextField()
