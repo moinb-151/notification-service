@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
+from django.template import Context, Template
 
 from ..users.models import NotificationPreference
 from .models import Notification, NotificationStatus, NotificationTemplate
@@ -61,6 +62,12 @@ class NotificationService:
             )
             .select_related("user")
             .first()
+        )
+
+    @staticmethod
+    def get_notification_by_id(notification_id):
+        return Notification.objects.select_related("user", "order").get(
+            id=notification_id,
         )
 
     @staticmethod
@@ -262,9 +269,18 @@ class NotificationPreferenceService:
 
 class NotificationTemplateService:
     @staticmethod
-    def get_template(event_type, channel):
-        return NotificationTemplate.objects.filter(event_type=event_type, channel=channel).first()
+    def get_template(event_type: str, channel: str) -> NotificationTemplate:
+        return NotificationTemplate.objects.get(
+            event_type=event_type,
+            channel=channel,
+        )
 
     @staticmethod
-    def render(template, context):
-        pass
+    def render(template: str, context: dict) -> str:
+        return Template(template).render(Context(context))
+
+    @staticmethod
+    def render_template(template: NotificationTemplate, context: dict) -> tuple[str, str]:
+        subject = NotificationTemplateService.render(template.subject, context)
+        body = NotificationTemplateService.render(template.body_template, context)
+        return subject, body
