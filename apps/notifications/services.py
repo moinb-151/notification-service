@@ -88,56 +88,6 @@ class NotificationService:
             return None
 
     @staticmethod
-    def _is_channel_enabled(user, channel):
-        preference = (
-            NotificationPreference.objects.filter(
-                user=user,
-                channel=channel,
-            )
-            .only("enabled")
-            .first()
-        )
-
-        if preference is None:
-            return True
-
-        return preference.enabled
-
-    @staticmethod
-    def _is_in_quiet_hours(user, channel):
-        preference = (
-            NotificationPreference.objects.filter(
-                user=user,
-                channel=channel,
-            )
-            .only(
-                "quiet_start",
-                "quiet_end",
-            )
-            .first()
-        )
-
-        if (
-            preference is None
-            or preference.quiet_start is None
-            or preference.quiet_end is None
-        ):
-            return False
-
-        user_timezone = ZoneInfo(user.timezone)
-        current_time = timezone.now().astimezone(user_timezone).time()
-
-        quiet_start = preference.quiet_start
-        quiet_end = preference.quiet_end
-
-        # Example: 22:00 -> 07:00
-        if quiet_start > quiet_end:
-            return current_time >= quiet_start or current_time < quiet_end
-
-        # Example: 13:00 -> 17:00
-        return quiet_start <= current_time < quiet_end
-
-    @staticmethod
     @transaction.atomic
     def mark_as_read(notification_id, user):
         try:
@@ -215,6 +165,56 @@ class NotificationPreferenceService:
             "user"
         )
         return preferences
+
+    @staticmethod
+    def _is_channel_enabled(user, channel):
+        preference = (
+            NotificationPreference.objects.filter(
+                user=user,
+                channel=channel,
+            )
+            .only("enabled")
+            .first()
+        )
+
+        if preference is None:
+            return True
+
+        return preference.enabled
+
+    @staticmethod
+    def _is_in_quiet_hours(user, channel):
+        preference = (
+            NotificationPreference.objects.filter(
+                user=user,
+                channel=channel,
+            )
+            .only(
+                "quiet_start",
+                "quiet_end",
+            )
+            .first()
+        )
+
+        if (
+            preference is None
+            or preference.quiet_start is None
+            or preference.quiet_end is None
+        ):
+            return False
+
+        user_timezone = ZoneInfo(user.timezone)
+        current_time = timezone.now().astimezone(user_timezone).time()
+
+        quiet_start = preference.quiet_start
+        quiet_end = preference.quiet_end
+
+        # Example: 22:00 -> 07:00
+        if quiet_start > quiet_end:
+            return current_time >= quiet_start or current_time < quiet_end
+
+        # Example: 13:00 -> 17:00
+        return quiet_start <= current_time < quiet_end
 
     @staticmethod
     @transaction.atomic
