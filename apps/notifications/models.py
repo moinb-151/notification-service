@@ -18,6 +18,7 @@ class NotificationStatus(models.TextChoices):
     SENT = "sent", "Sent"
     FAILED = "failed", "Failed"
     SUPPRESSED = "suppressed", "Suppressed"
+    DEFERRED = "deferred", "Deferred"
 
 class NotificationEventType(models.TextChoices):
     ORDER_CREATED = "ORDER_CREATED", "Order Created"
