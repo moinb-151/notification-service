@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from datetime import time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
+from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from django.template import Context, Template
 
 from ..users.models import NotificationPreference
 from .models import Notification, NotificationStatus, NotificationTemplate
@@ -66,9 +66,12 @@ class NotificationService:
 
     @staticmethod
     def get_notification_by_id(notification_id):
-        return Notification.objects.select_related("user", "order").get(
-            id=notification_id,
-        )
+        try:
+            return Notification.objects.select_related("user", "order").get(
+                id=notification_id,
+            )
+        except Notification.DoesNotExist:
+            return None
 
     @staticmethod
     @transaction.atomic
@@ -167,35 +170,16 @@ class NotificationPreferenceService:
         return preferences
 
     @staticmethod
-    def _is_channel_enabled(user, channel):
-        preference = (
-            NotificationPreference.objects.filter(
-                user=user,
-                channel=channel,
-            )
-            .only("enabled")
-            .first()
-        )
+    def get_preference_by_channel(user, channel):
+        preference = NotificationPreference.objects.filter(
+            user=user,
+            channel=channel,
+        ).first()
 
-        if preference is None:
-            return True
-
-        return preference.enabled
+        return preference
 
     @staticmethod
-    def _is_in_quiet_hours(user, channel):
-        preference = (
-            NotificationPreference.objects.filter(
-                user=user,
-                channel=channel,
-            )
-            .only(
-                "quiet_start",
-                "quiet_end",
-            )
-            .first()
-        )
-
+    def is_in_quiet_hours(preference):
         if (
             preference is None
             or preference.quiet_start is None
@@ -203,7 +187,7 @@ class NotificationPreferenceService:
         ):
             return False
 
-        user_timezone = ZoneInfo(user.timezone)
+        user_timezone = ZoneInfo(preference.user.timezone)
         current_time = timezone.now().astimezone(user_timezone).time()
 
         quiet_start = preference.quiet_start
@@ -215,6 +199,32 @@ class NotificationPreferenceService:
 
         # Example: 13:00 -> 17:00
         return quiet_start <= current_time < quiet_end
+
+    @staticmethod
+    def get_next_allowed_time(preference):
+        if (
+            preference.quiet_start is None
+            or preference.quiet_end is None
+        ):
+            return None
+
+        user_timezone = ZoneInfo(preference.user.timezone)
+        now = timezone.now().astimezone(user_timezone)
+
+        quiet_start = datetime.combine(now.date(), preference.quiet_start, tzinfo=user_timezone)
+        quiet_end = datetime.combine(now.date(), preference.quiet_end, tzinfo=user_timezone)
+
+        # Quiet hours cross midnight (e.g. 22:00 -> 07:00)
+        if quiet_start >= quiet_end:
+            quiet_end += timedelta(days=1)
+
+            # If it's after midnight but before quiet_end,
+            # quiet_start belongs to yesterday.
+            if now.time() < preference.quiet_end:
+                quiet_start -= timedelta(days=1)
+                quiet_end -= timedelta(days=1)
+
+        return quiet_end
 
     @staticmethod
     @transaction.atomic
