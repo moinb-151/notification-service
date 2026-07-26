@@ -7,8 +7,11 @@ from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from common.choices import ChannelType
+
 from ..users.models import NotificationPreference
 from .models import Notification, NotificationStatus, NotificationTemplate
+from .providers.choices import PROVIDERS
 
 
 @dataclass(frozen=True)
@@ -202,17 +205,18 @@ class NotificationPreferenceService:
 
     @staticmethod
     def get_next_allowed_time(preference):
-        if (
-            preference.quiet_start is None
-            or preference.quiet_end is None
-        ):
+        if preference.quiet_start is None or preference.quiet_end is None:
             return None
 
         user_timezone = ZoneInfo(preference.user.timezone)
         now = timezone.now().astimezone(user_timezone)
 
-        quiet_start = datetime.combine(now.date(), preference.quiet_start, tzinfo=user_timezone)
-        quiet_end = datetime.combine(now.date(), preference.quiet_end, tzinfo=user_timezone)
+        quiet_start = datetime.combine(
+            now.date(), preference.quiet_start, tzinfo=user_timezone
+        )
+        quiet_end = datetime.combine(
+            now.date(), preference.quiet_end, tzinfo=user_timezone
+        )
 
         # Quiet hours cross midnight (e.g. 22:00 -> 07:00)
         if quiet_start >= quiet_end:
@@ -277,6 +281,7 @@ class NotificationPreferenceService:
 
         return modified_preferences
 
+
 class NotificationTemplateService:
     @staticmethod
     def get_template(event_type: str, channel: str) -> NotificationTemplate:
@@ -290,7 +295,23 @@ class NotificationTemplateService:
         return Template(template).render(Context(context))
 
     @staticmethod
-    def render_template(template: NotificationTemplate, context: dict) -> tuple[str, str]:
+    def render_template(
+        template: NotificationTemplate, context: dict
+    ) -> tuple[str, str]:
         subject = NotificationTemplateService.render(template.subject, context)
         body = NotificationTemplateService.render(template.body_template, context)
         return subject, body
+
+
+class NotificationDispatcher:
+    @staticmethod
+    def send(notification: Notification, subject: str, body: str) -> str:
+        provider = PROVIDERS[notification.channel]
+
+        match notification.channel:
+            case ChannelType.EMAIL:
+                return provider.send(
+                    to=notification.payload["email"],
+                    subject=subject,
+                    body=body,
+                )
