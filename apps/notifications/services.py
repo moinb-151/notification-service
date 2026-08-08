@@ -7,11 +7,8 @@ from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from common.choices import ChannelType
-
 from ..users.models import NotificationPreference
 from .models import Notification, NotificationStatus, NotificationTemplate
-from .providers.choices import PROVIDERS
 
 
 @dataclass(frozen=True)
@@ -163,6 +160,28 @@ class NotificationService:
         except Notification.DoesNotExist:
             return None
 
+    @staticmethod
+    @transaction.atomic
+    def defer_notification(notification_id, user, scheduled_for):
+        return NotificationService.update_notification(
+            notification_id=notification_id,
+            user=user,
+            validated_data={
+                "status": NotificationStatus.DEFERRED,
+                "scheduled_for": scheduled_for,
+            },
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def mark_suppressed(notification_id, user):
+        return NotificationService.update_notification(
+            notification_id=notification_id,
+            user=user,
+            validated_data={
+                "status": NotificationStatus.SUPPRESSED,
+            },
+        )
 
 class NotificationPreferenceService:
     @staticmethod
@@ -301,17 +320,3 @@ class NotificationTemplateService:
         subject = NotificationTemplateService.render(template.subject, context)
         body = NotificationTemplateService.render(template.body_template, context)
         return subject, body
-
-
-class NotificationDispatcher:
-    @staticmethod
-    def send(notification: Notification, subject: str, body: str) -> str:
-        provider = PROVIDERS[notification.channel]
-
-        match notification.channel:
-            case ChannelType.EMAIL:
-                return provider.send(
-                    to=notification.payload["email"],
-                    subject=subject,
-                    body=body,
-                )

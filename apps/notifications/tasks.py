@@ -1,7 +1,10 @@
 from celery import shared_task
 
+from common.choices import ChannelType
+
 from .models import NotificationStatus
-from .providers.choices import PROVIDERS
+from .providers.email import EmailProvider
+from .providers.sms import SMSProvider
 from .services import (
     NotificationPreferenceService,
     NotificationService,
@@ -31,12 +34,9 @@ def process_notification(notification_id):
 
     # Channel disabled
     if not preference.enabled:
-        NotificationService.update_notification(
+        NotificationService.mark_suppressed(
             notification_id=notification.id,
             user=notification.user,
-            validated_data={
-                "status": NotificationStatus.SUPPRESSED,
-            },
         )
 
         NotificationService.record_failure(
@@ -51,13 +51,10 @@ def process_notification(notification_id):
             preference
         )
 
-        NotificationService.update_notification(
+        NotificationService.defer_notification(
             notification_id=notification.id,
             user=notification.user,
-            validated_data={
-                "status": NotificationStatus.DEFERRED,
-                "scheduled_for": next_allowed_time,
-            },
+            scheduled_for=next_allowed_time,
         )
 
         return
@@ -84,15 +81,25 @@ def process_notification(notification_id):
         context=notification.payload,
     )
 
-    provider = PROVIDERS[notification.channel]
-
     try:
-        message_id = provider.send(  # ty: ignore[unresolved-attribute]
-            to=notification.payload["email"],
-            subject=subject,
-            body=body,
-        )
-
+        match notification.channel:
+            case ChannelType.EMAIL:
+                message_id = EmailProvider.send(
+                    to=notification.user.email,
+                    subject=subject,
+                    body=body,
+                )
+            case ChannelType.SMS:
+                message_id = SMSProvider.send(
+                    phone_number=notification.user.phone,
+                    message=body,
+                )
+            case _:
+                NotificationService.record_failure(
+                    notification_id=notification.id,
+                    error_message=f"Unsupported channel: {notification.channel}.",
+                )
+                return
     except Exception as exc:
         NotificationService.record_failure(
             notification_id=notification.id,
