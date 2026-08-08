@@ -7,7 +7,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from .models import User
-from .serializers import LoginSerializer, UserRegistrationSerializer
+from .serializers import (
+    LoginSerializer,
+    UserRegistrationSerializer,
+    UserProfileSerializer,
+)
 from .utils import _set_auth_cookie
 
 
@@ -55,6 +59,23 @@ class LoginView(TokenObtainPairView):
 
             return response
 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        user = request.user
+        serializer = UserProfileSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

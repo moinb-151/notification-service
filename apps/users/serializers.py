@@ -35,3 +35,8 @@ class LoginSerializer(TokenObtainPairSerializer):
         message = "Login successfull"
         data.update({"message": message, "user": user_data})
         return data
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "email", "phone", "created_at", "updated_at"]
