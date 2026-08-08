@@ -183,6 +183,7 @@ class NotificationService:
             },
         )
 
+
 class NotificationPreferenceService:
     @staticmethod
     def get_preferences(user):
@@ -209,7 +210,7 @@ class NotificationPreferenceService:
         ):
             return False
 
-        user_timezone = ZoneInfo(preference.user.timezone)
+        user_timezone = ZoneInfo(preference.timezone)
         current_time = timezone.now().astimezone(user_timezone).time()
 
         quiet_start = preference.quiet_start
