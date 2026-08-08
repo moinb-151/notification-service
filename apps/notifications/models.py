@@ -26,6 +26,7 @@ class NotificationEventType(models.TextChoices):
     ORDER_SHIPPED = "ORDER_SHIPPED", "Order Shipped"
     PAYMENT_SUCCESS = "PAYMENT_SUCCESS", "Payment Success"
     PAYMENT_FAILED = "PAYMENT_FAILED", "Payment Failed"
+    TEST_NOTIFICATION = "TEST_NOTIFICATION", "Test Notification"
 
 
 class Notification(models.Model):
