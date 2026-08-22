@@ -304,11 +304,14 @@ class NotificationPreferenceService:
 
 class NotificationTemplateService:
     @staticmethod
-    def get_template(event_type: str, channel: str) -> NotificationTemplate:
-        return NotificationTemplate.objects.get(
-            event_type=event_type,
-            channel=channel,
-        )
+    def get_template(event_type: str, channel: str) -> NotificationTemplate | None:
+        try:
+            return NotificationTemplate.objects.get(
+                event_type=event_type,
+                channel=channel,
+            )
+        except NotificationTemplate.DoesNotExist:
+            return None
 
     @staticmethod
     def render(template: str, context: dict) -> str:
