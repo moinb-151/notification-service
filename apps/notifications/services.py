@@ -228,7 +228,7 @@ class NotificationPreferenceService:
         if preference.quiet_start is None or preference.quiet_end is None:
             return None
 
-        user_timezone = ZoneInfo(preference.user.timezone)
+        user_timezone = ZoneInfo(preference.timezone)
         now = timezone.now().astimezone(user_timezone)
 
         quiet_start = datetime.combine(
