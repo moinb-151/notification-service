@@ -61,6 +61,7 @@ class NotificationPreferenceUpdateSerializer(serializers.ModelSerializer):
         model = NotificationPreference
         fields = [
             "enabled",
+            "timezone",
             "quiet_start",
             "quiet_end",
         ]
