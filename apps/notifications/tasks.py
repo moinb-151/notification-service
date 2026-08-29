@@ -1,8 +1,9 @@
 from celery import shared_task
+from django.conf import settings
 
 from common.choices import ChannelType
 
-from .models import NotificationStatus
+from .models import NotificationStatus, NotificationEventType
 from .providers.email import EmailProvider
 from .providers.sms import SMSProvider
 from .services import (
@@ -10,10 +11,15 @@ from .services import (
     NotificationService,
     NotificationTemplateService,
 )
+from .exceptions import (
+    NotificationProviderError,
+    TransientNotificationProviderError,
+    PermanentNotificationProviderError,
+)
 
 
-@shared_task
-def process_notification(notification_id):
+@shared_task(bind=True)
+def process_notification(self, notification_id):
     notification = NotificationService.get_notification_by_id(notification_id)
 
     if notification is None:
@@ -81,6 +87,10 @@ def process_notification(notification_id):
         context=notification.payload,
     )
 
+    NotificationService.record_attempt(
+        notification_id=notification.id,
+    )
+
     try:
         match notification.channel:
             case ChannelType.EMAIL:
@@ -100,7 +110,26 @@ def process_notification(notification_id):
                     error_message=f"Unsupported channel: {notification.channel}.",
                 )
                 return
-    except Exception as exc:
+    except TransientNotificationProviderError as exc:
+        if self.request.retries >= settings.NOTIFICATION_MAX_RETRIES:
+            NotificationService.record_failure(
+                notification_id=notification.id,
+                error_message="Max retries reached.",
+            )
+
+        raise self.retry(
+            exc=exc,
+            countdown=settings.NOTIFICATION_RETRY_BACKOFF * (2**self.request.retries),
+        )
+
+    except PermanentNotificationProviderError as exc:
+        NotificationService.record_failure(
+            notification_id=notification.id,
+            error_message=str(exc),
+        )
+        return
+
+    except NotificationProviderError as exc:
         NotificationService.record_failure(
             notification_id=notification.id,
             error_message=str(exc),
