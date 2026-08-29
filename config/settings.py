@@ -136,6 +136,9 @@ CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = False
 
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
+NOTIFICATION_MAX_RETRIES = config("NOTIFICATION_MAX_RETRIES", cast=int, default=3)
+NOTIFICATION_RETRY_BACKOFF = config("NOTIFICATION_RETRY_BACKOFF", cast=int, default=60)
+
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
