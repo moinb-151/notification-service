@@ -56,6 +56,7 @@ class Notification(models.Model):
     attempts = models.PositiveSmallIntegerField(default=0)
     last_attempted_at = models.DateTimeField(null=True, blank=True)
     scheduled_for = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

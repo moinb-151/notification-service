@@ -163,10 +163,12 @@ class NotificationService:
             )
 
             notification.status = NotificationStatus.FAILED
+            notification.error_message = error_message
 
             notification.save(
                 update_fields=[
                     "status",
+                    "error_message",
                 ]
             )
 
