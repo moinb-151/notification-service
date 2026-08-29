@@ -1,9 +1,10 @@
 import requests
 from django.conf import settings
-
-
-class NotificationProviderError(Exception):
-    pass
+from ..exceptions import (
+    NotificationProviderError,
+    TransientNotificationProviderError,
+    PermanentNotificationProviderError,
+)
 
 
 class SMSProvider:
@@ -23,19 +24,41 @@ class SMSProvider:
             "numbers": phone_number,
         }
 
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=10,
-        )
-        response.raise_for_status()
-
-        data = response.json()
-
-        if not data.get("return"):
-            raise NotificationProviderError(
-                ", ".join(data.get("message", ["Unknown Fast2SMS error"]))
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=10,
             )
+            response.raise_for_status()
 
-        return data["request_id"]
+            data = response.json()
+
+            if not data.get("return"):
+                raise NotificationProviderError(
+                    ", ".join(data.get("message", ["Unknown Fast2SMS error"]))
+                )
+
+            return data["request_id"]
+        except requests.Timeout as exc:
+            raise TransientNotificationProviderError(
+                "Fast2SMS request timed out."
+            ) from exc
+
+        except requests.ConnectionError as exc:
+            raise TransientNotificationProviderError(
+                "Unable to connect to Fast2SMS."
+            ) from exc
+
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code
+
+            if status_code == 429 or status_code >= 500:
+                raise TransientNotificationProviderError(
+                    f"Fast2SMS returned HTTP {status_code}."
+                ) from exc
+
+            raise PermanentNotificationProviderError(
+                f"Fast2SMS returned HTTP {status_code}."
+            ) from exc
