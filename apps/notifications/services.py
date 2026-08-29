@@ -139,12 +139,14 @@ class NotificationService:
 
             notification.status = NotificationStatus.SENT
             notification.provider_message_id = provider_message_id
+            notification.error_message = None
             notification.sent_at = timezone.now()
 
             notification.save(
                 update_fields=[
                     "status",
                     "provider_message_id",
+                    "error_message",
                     "sent_at",
                 ]
             )
