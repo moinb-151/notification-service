@@ -108,6 +108,29 @@ class NotificationService:
 
     @staticmethod
     @transaction.atomic
+    def record_attempt(notification_id):
+        try:
+            notification = Notification.objects.select_for_update().get(
+                id=notification_id
+            )
+
+            notification.attempts += 1
+            notification.last_attempted_at = timezone.now()
+
+            notification.save(
+                update_fields=[
+                    "attempts",
+                    "last_attempted_at",
+                ]
+            )
+
+            return notification
+
+        except Notification.DoesNotExist:
+            return None
+
+    @staticmethod
+    @transaction.atomic
     def record_delivery(notification_id, provider_message_id):
         try:
             notification = Notification.objects.select_for_update().get(
@@ -116,16 +139,12 @@ class NotificationService:
 
             notification.status = NotificationStatus.SENT
             notification.provider_message_id = provider_message_id
-            notification.attempts += 1
-            notification.last_attempted_at = timezone.now()
             notification.sent_at = timezone.now()
 
             notification.save(
                 update_fields=[
                     "status",
                     "provider_message_id",
-                    "attempts",
-                    "last_attempted_at",
                     "sent_at",
                 ]
             )
@@ -144,14 +163,10 @@ class NotificationService:
             )
 
             notification.status = NotificationStatus.FAILED
-            notification.attempts += 1
-            notification.last_attempted_at = timezone.now()
 
             notification.save(
                 update_fields=[
                     "status",
-                    "attempts",
-                    "last_attempted_at",
                 ]
             )
 
