@@ -70,6 +70,7 @@ class Notification(models.Model):
             models.Index(fields=["status"], name="notification_status_idx"),
             models.Index(fields=["order"], name="notification_order_idx"),
             models.Index(fields=["event_type"], name="event_type_idx"),
+            models.Index(fields=["scheduled_for"], name="scheduled_for_idx")
         ]
 
     def __str__(self):
