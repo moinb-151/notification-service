@@ -24,6 +24,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             "is_read",
             "attempts",
             "last_attempted_at",
+            "scheduled_for",
             "error_message",
             "sent_at",
             "created_at",
