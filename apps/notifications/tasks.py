@@ -1,9 +1,11 @@
 from celery import shared_task
 from django.conf import settings
+from django.utils import timezone
+from django.db import transaction
 
 from common.choices import ChannelType
 
-from .models import NotificationStatus, NotificationEventType
+from .models import Notification, NotificationStatus, NotificationEventType
 from .providers.email import EmailProvider
 from .providers.sms import SMSProvider
 from .services import (
@@ -142,9 +144,30 @@ def process_notification(self, notification_id):
     )
 
 
-# @shared_task
-# def send_email_notification(notification_id, user):
-#     notification = NotificationService.get_notification(
-#         notification_id=notification_id,
-#         user=user
-#     )
+@shared_task
+def process_deferred_notifications():
+    now = timezone.now()
+
+    with transaction.atomic():
+        notifications = list(
+            Notification.objects.select_for_update(skip_locked=True).filter(
+                status=NotificationStatus.DEFERRED,
+                scheduled_for__lte=now,
+            )
+        )
+
+        for notification in notifications:
+            notification.status = NotificationStatus.PENDING
+            notification.scheduled_for = None
+
+            notification.save(
+                update_fields=[
+                    "status",
+                    "scheduled_for",
+                ]
+            )
+
+    for notification in notifications:
+        process_notification.delay(
+            notification_id=notification.id,
+        )
