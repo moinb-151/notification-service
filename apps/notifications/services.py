@@ -181,15 +181,31 @@ class NotificationService:
 
     @staticmethod
     @transaction.atomic
-    def defer_notification(notification_id, user, scheduled_for):
-        return NotificationService.update_notification(
-            notification_id=notification_id,
-            user=user,
-            validated_data={
-                "status": NotificationStatus.DEFERRED,
-                "scheduled_for": scheduled_for,
-            },
-        )
+    def defer_notification(
+        notification_id,
+        user,
+        scheduled_for,
+    ):
+        try:
+            notification = Notification.objects.select_for_update().get(
+                id=notification_id,
+                user=user,
+            )
+
+            notification.status = NotificationStatus.DEFERRED
+            notification.scheduled_for = scheduled_for
+
+            notification.save(
+                update_fields=[
+                    "status",
+                    "scheduled_for",
+                ]
+            )
+
+            return notification
+
+        except Notification.DoesNotExist:
+            return None
 
     @staticmethod
     @transaction.atomic
