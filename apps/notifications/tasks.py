@@ -118,6 +118,7 @@ def process_notification(self, notification_id):
                 notification_id=notification.id,
                 error_message="Max retries reached.",
             )
+            raise exc
 
         raise self.retry(
             exc=exc,
