@@ -14,6 +14,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from decouple import config
+from kombu import Exchange, Queue
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -135,6 +136,18 @@ CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = False
 
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+CELERY_TASK_QUEUES = [
+    Queue(
+        "celery",
+        Exchange("celery", type="direct"),
+        routing_key="celery",
+        queue_arguments={
+            "x-dead-letter-exchange": "notification.dlx",
+            "x-dead-letter-routing-key": "notification.dlq",
+        },
+    ),
+]
 
 NOTIFICATION_MAX_RETRIES = config("NOTIFICATION_MAX_RETRIES", cast=int, default=3)
 NOTIFICATION_RETRY_BACKOFF = config("NOTIFICATION_RETRY_BACKOFF", cast=int, default=60)
