@@ -1,8 +1,12 @@
 import json
 
 import pika
+import logging
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from ...services.dlq_service import NotificationDLQService
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -21,15 +25,60 @@ class Command(BaseCommand):
         )
 
         def callback(ch, method, properties, body):
-            message = json.loads(body)
+            try:
+                message = json.loads(body)
 
-            notification_id = message[1]["notification_id"]["__value__"]["hex"]
+            except json.JSONDecodeError:
+                self.stderr.write(
+                    self.style.ERROR("Malformed JSON received from notification DLQ.")
+                )
 
-            self.stdout.write("\n=== DLQ MESSAGE ===")
-            self.stdout.write(f"Notification ID: {notification_id}")
+                ch.basic_ack(
+                    delivery_tag=method.delivery_tag,
+                )
+                return
 
-            self.stdout.write("\n=== HEADERS ===")
-            self.stdout.write(str(properties.headers))
+            headers = properties.headers or {}
+
+            notification_id = NotificationDLQService.extract_notification_id(message)
+
+            if notification_id is None:
+                self.stderr.write(
+                    self.style.ERROR(
+                        "Could not extract notification_id from DLQ message."
+                    )
+                )
+
+                ch.basic_ack(
+                    delivery_tag=method.delivery_tag,
+                )
+                return
+
+            task_id = headers.get("id")
+            retries = headers.get("retries", 0)
+
+            try:
+                NotificationDLQService.handle(
+                    notification_id=notification_id,
+                    task_id=task_id,
+                    retries=retries,
+                    headers=headers,
+                )
+
+            except Exception:
+                logger.exception(
+                    "Failed to process notification DLQ message",
+                    extra={
+                        "notification_id": notification_id,
+                        "task_id": task_id,
+                    },
+                )
+
+                ch.basic_nack(
+                    delivery_tag=method.delivery_tag,
+                    requeue=True,
+                )
+                return
 
             ch.basic_ack(
                 delivery_tag=method.delivery_tag,
@@ -41,9 +90,7 @@ class Command(BaseCommand):
             auto_ack=False,
         )
 
-        self.stdout.write(
-            self.style.SUCCESS("Waiting for DLQ messages...")
-        )
+        self.stdout.write(self.style.SUCCESS("Waiting for DLQ messages..."))
 
         try:
             channel.start_consuming()
