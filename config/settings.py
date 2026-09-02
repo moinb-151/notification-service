@@ -152,6 +152,36 @@ CELERY_TASK_QUEUES = [
 NOTIFICATION_MAX_RETRIES = config("NOTIFICATION_MAX_RETRIES", cast=int, default=3)
 NOTIFICATION_RETRY_BACKOFF = config("NOTIFICATION_RETRY_BACKOFF", cast=int, default=60)
 
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "()": "config.logging.ExtraFormatter",
+            "format": ("{asctime} {levelname} {name} {message}"),
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "logs/notifications.log",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "apps.notifications": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
