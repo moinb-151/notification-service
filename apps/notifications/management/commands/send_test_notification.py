@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from ....notifications.services import NotificationService
+from ....notifications.services.notification_service import NotificationService
 from ....users.models import User
 from ...tasks import process_notification
 import uuid_utils.compat as uuid

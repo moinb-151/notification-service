@@ -8,11 +8,9 @@ from common.choices import ChannelType
 from .models import Notification, NotificationStatus, NotificationEventType
 from .providers.email import EmailProvider
 from .providers.sms import SMSProvider
-from .services import (
-    NotificationPreferenceService,
-    NotificationService,
-    NotificationTemplateService,
-)
+from .services.notification_preference_service import NotificationPreferenceService
+from .services.notification_service import NotificationService
+from .services.notification_template_service import NotificationTemplateService
 from .exceptions import (
     NotificationProviderError,
     TransientNotificationProviderError,

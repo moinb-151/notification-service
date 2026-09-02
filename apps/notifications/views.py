@@ -8,7 +8,8 @@ from .serializers import (
     NotificationPreferenceUpdateSerializer,
     NotificationSerializer,
 )
-from .services import NotificationPreferenceService, NotificationService
+from .services.notification_preference_service import NotificationPreferenceService
+from .services.notification_service import NotificationService
 
 
 class NotificationListView(generics.ListAPIView):
