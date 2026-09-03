@@ -235,6 +235,7 @@ class NotificationService:
                     "status",
                     "error_message",
                     "scheduled_for",
+                    "updated_at",
                 ]
             )
 
