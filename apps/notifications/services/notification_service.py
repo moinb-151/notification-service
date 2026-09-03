@@ -4,6 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import Notification, NotificationStatus
+from ..tasks import process_notification
 
 
 @dataclass(frozen=True)
@@ -212,3 +213,37 @@ class NotificationService:
                 "status": NotificationStatus.SUPPRESSED,
             },
         )
+
+    @staticmethod
+    @transaction.atomic
+    def replay_notification(notification_id):
+        try:
+            notification = Notification.objects.select_for_update().get(
+                id=notification_id
+            )
+
+            if notification.status != NotificationStatus.FAILED:
+                raise ValueError(
+                    "Only notifications with status 'failed' can be replayed."
+                )
+
+            notification.status = NotificationStatus.PENDING
+            notification.error_message = None
+            notification.scheduled_for = None
+
+            notification.save(
+                update_fields=[
+                    "status",
+                    "error_message",
+                    "scheduled_for",
+                ]
+            )
+
+            transaction.on_commit(
+                lambda: process_notification.delay(str(notification_id))
+            )
+
+            return notification
+
+        except Notification.DoesNotExist:
+            return None
