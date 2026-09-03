@@ -4,7 +4,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import Notification, NotificationStatus
-from ..tasks import process_notification
 
 
 @dataclass(frozen=True)
@@ -238,6 +237,8 @@ class NotificationService:
                     "scheduled_for",
                 ]
             )
+
+            from ..tasks import process_notification
 
             transaction.on_commit(
                 lambda: process_notification.delay(str(notification_id))
