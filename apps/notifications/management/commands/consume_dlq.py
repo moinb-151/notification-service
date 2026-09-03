@@ -19,6 +19,8 @@ class Command(BaseCommand):
 
         channel = connection.channel()
 
+        channel.confirm_delivery()
+
         channel.queue_declare(
             queue="notification.dlq",
             durable=True,
@@ -74,9 +76,27 @@ class Command(BaseCommand):
                     },
                 )
 
-                ch.basic_nack(
+                try:
+                    ch.basic_publish(
+                        exchange="notification.parking",
+                        routing_key="notification.parking",
+                        body=body,
+                        properties=properties,
+                        mandatory=True,
+                    )
+                except (pika.exceptions.NackError, pika.exceptions.UnroutableError):
+                    logger.exception(
+                        "Failed to move DLQ message to parking queue",
+                        extra={
+                            "notification_id": notification_id,
+                            "task_id": task_id,
+                        },
+                    )
+
+                    return
+
+                ch.basic_ack(
                     delivery_tag=method.delivery_tag,
-                    requeue=True,
                 )
                 return
 
