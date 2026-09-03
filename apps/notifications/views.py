@@ -124,3 +124,27 @@ class NotificationPreferenceView(APIView):
             response_serializer.data,
             status=status.HTTP_200_OK,
         )
+
+#Admin 
+
+class NotificationReplayView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request, notification_id):
+        notification = NotificationService.replay_notification(
+            notification_id=notification_id
+        )
+
+        if notification is None:
+            return Response(
+                {"detail": "Notification not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "detail": "Notification replay queued successfully.",
+                "notification_id": str(notification_id),
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

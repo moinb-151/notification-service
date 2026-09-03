@@ -5,6 +5,7 @@ from .views import (
     NotificationPreferenceListView,
     NotificationPreferenceView,
     NotificationView,
+    NotificationReplayView,
 )
 
 urlpatterns = [
@@ -24,5 +25,9 @@ urlpatterns = [
         NotificationPreferenceView.as_view(),
         name="preference-update",
     ),
-    
+    path(
+        "replay/<uuid:notification_id>/",
+        NotificationReplayView.as_view(),
+        name="replay-notification",
+    ),
 ]
