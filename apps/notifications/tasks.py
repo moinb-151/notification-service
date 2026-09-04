@@ -44,11 +44,6 @@ def process_notification(self, notification_id):
             notification_id=notification.id,
             user=notification.user,
         )
-
-        NotificationService.record_failure(
-            notification_id=notification.id,
-            error_message="Notification channel is disabled.",
-        )
         return
 
     # Quiet hours
