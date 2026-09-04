@@ -1,9 +1,11 @@
+import hashlib
 from dataclasses import dataclass
 
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import Notification, NotificationStatus
+from ..models import Notification, NotificationStatus, NotificationEventType
+from common.choices import ChannelType
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,66 @@ class NotificationService:
             return notification
         except Notification.DoesNotExist:
             return None
+
+    @staticmethod
+    def create_order_created_notification(order, channel):
+        idempotency_key = hashlib.sha256(
+            f"{order.user_id}:{order.id}:"
+            f"{NotificationEventType.ORDER_CREATED}:{channel}".encode()
+        ).hexdigest()
+
+        payload = {
+            "order_id": str(order.id),
+            "order_status": order.status,
+            "total_amount": str(order.total_amount),
+            "metadata": order.metadata,
+        }
+
+        return NotificationService.create_notification(
+            {
+                "user": order.user,
+                "order": order,
+                "channel": channel,
+                "event_type": NotificationEventType.ORDER_CREATED,
+                "status": NotificationStatus.PENDING,
+                "idempotency_key": idempotency_key,
+                "payload": payload,
+            }
+        )
+
+    @staticmethod
+    def create_order_cancelled_notification(order, channel):
+        idempotency_key = hashlib.sha256(
+            f"{order.user_id}:{order.id}:"
+            f"{NotificationEventType.ORDER_CANCELLED}:{channel}".encode()
+        ).hexdigest()
+
+        payload = {
+            "order_id": str(order.id),
+            "order_status": order.status,
+            "total_amount": str(order.total_amount),
+            "metadata": order.metadata,
+        }
+
+        return NotificationService.create_notification(
+            {
+                "user": order.user,
+                "order": order,
+                "channel": channel,
+                "event_type": NotificationEventType.ORDER_CANCELLED,
+                "status": NotificationStatus.PENDING,
+                "idempotency_key": idempotency_key,
+                "payload": payload,
+            }
+        )
+
+    @staticmethod
+    def dispatch_notification_on_commit(notification):
+        from ..tasks import process_notification
+
+        transaction.on_commit(
+            lambda: process_notification.delay(str(notification.id))
+        )
 
     @staticmethod
     @transaction.atomic
