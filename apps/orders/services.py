@@ -172,6 +172,7 @@ class OrderService:
     @transaction.atomic
     def create_order(validated_data, context):
         items = validated_data.pop("items")
+
         products = OrderService.fetch_products(items)
         products_map = {product.id: product for product in products}
 
@@ -185,13 +186,54 @@ class OrderService:
         validated_data["total_amount"] = total_amount
 
         order_record = OrderService.create_order_record(validated_data)
+
         if not order_record.created:
             return order_record
 
         OrderService.create_order_items(order_record.order, items, products_map)
         OrderService.deduct_quantity(items, products_map)
 
+        OrderService.create_order_notifications(order_record.order)
+
         return order_record
+
+    @staticmethod
+    def create_order_notifications(order):
+        from common.choices import ChannelType
+        from apps.notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        for channel in (
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+        ):
+            result = NotificationService.create_order_created_notification(
+                order=order,
+                channel=channel,
+            )
+
+            if result.created:
+                NotificationService.dispatch_notification_on_commit(result.notification)
+
+    @staticmethod
+    def cancel_order_notifications(order):
+        from common.choices import ChannelType
+        from apps.notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        for channel in (
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+        ):
+            result = NotificationService.create_order_cancelled_notification(
+                order=order,
+                channel=channel,
+            )
+
+            if result.created:
+                NotificationService.dispatch_notification_on_commit(result.notification)
 
     @staticmethod
     def get_orders(user):
@@ -264,7 +306,9 @@ class OrderService:
 
             order.status = cancel_status
 
-            order.save(update_fields=["status"])
+            order.save(update_fields=["status", "updated_at"])
+
+            OrderService.cancel_order_notifications(order)
 
             return order
         except Order.DoesNotExist:
