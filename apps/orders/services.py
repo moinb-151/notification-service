@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework.exceptions import ValidationError
 
 from .models import Order, OrderItem, OrderStatus, Product
@@ -108,18 +108,24 @@ class OrderService:
 
     @staticmethod
     def create_order_record(validated_data):
-        order = None
-        existing_order = Order.objects.filter(
-            idempotency_key=validated_data["idempotency_key"]
-        ).first()
+        try:
+            with transaction.atomic():
+                order = Order.objects.create(**validated_data)
 
-        if existing_order:
-            order = CreateOrderResult(order=existing_order, created=False)
-        else:
-            new_order = Order.objects.create(**validated_data)
-            order = CreateOrderResult(order=new_order, created=True)
+            return CreateOrderResult(
+                order=order,
+                created=True,
+            )
 
-        return order
+        except IntegrityError:
+            existing_order = Order.objects.get(
+                idempotency_key=validated_data["idempotency_key"]
+            )
+
+            return CreateOrderResult(
+                order=existing_order,
+                created=False,
+            )
 
     @staticmethod
     def create_order_items(order, items, products_map):
@@ -166,7 +172,6 @@ class OrderService:
     @transaction.atomic
     def create_order(validated_data, context):
         items = validated_data.pop("items")
-        print(items)
         products = OrderService.fetch_products(items)
         products_map = {product.id: product for product in products}
 
