@@ -682,9 +682,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         mock_process_notification.assert_not_called()
 
-    @patch(
-        "apps.notifications.tasks.process_notification.delay"
-    )
+    @patch("apps.notifications.tasks.process_notification.delay")
     def test_non_status_update_does_not_create_shipping_notification(
         self,
         mock_process_notification,
@@ -737,4 +735,262 @@ class OrderNotificationIntegrationTests(TestCase):
             2,
         )
 
+        mock_process_notification.assert_not_called()
+
+    @patch("apps.notifications.tasks.process_notification.delay")
+    def test_delivery_order_creates_notifications(
+        self,
+        mock_process_notification,
+    ):
+        with self.captureOnCommitCallbacks(execute=True):
+            order_result = OrderService.create_order(
+                validated_data=self.validated_data.copy(),
+                context=self.context,
+            )
+
+        order = order_result.order
+
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.CONFIRMED,
+        )
+
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.SHIPPED,
+        )
+
+        mock_process_notification.reset_mock()
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            order = OrderService.update_order(
+                order_id=order.id,
+                user=self.user,
+                status=OrderStatus.DELIVERED,
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            OrderStatus.DELIVERED,
+        )
+
+        notifications = Notification.objects.filter(
+            order=order,
+            event_type=NotificationEventType.ORDER_DELIVERED,
+        )
+
+        self.assertEqual(
+            notifications.count(),
+            2,
+        )
+
+        self.assertSetEqual(
+            set(notifications.values_list("channel", flat=True)),
+            {
+                ChannelType.EMAIL,
+                ChannelType.SMS,
+            },
+        )
+
+        for notification in notifications:
+            self.assertEqual(
+                notification.user,
+                self.user,
+            )
+
+            self.assertEqual(
+                notification.order,
+                order,
+            )
+
+            self.assertEqual(
+                notification.status,
+                NotificationStatus.PENDING,
+            )
+
+            self.assertEqual(
+                notification.payload["order_id"],
+                str(order.id),
+            )
+
+            self.assertEqual(
+                notification.payload["order_status"],
+                OrderStatus.DELIVERED,
+            )
+
+            self.assertEqual(
+                notification.payload["total_amount"],
+                str(order.total_amount),
+            )
+
+        self.assertEqual(
+            len(callbacks),
+            2,
+        )
+
+        self.assertEqual(
+            mock_process_notification.call_count,
+            2,
+        )
+
+        dispatched_ids = {
+            call.args[0] for call in mock_process_notification.call_args_list
+        }
+
+        notification_ids = {str(notification.id) for notification in notifications}
+
+        self.assertSetEqual(
+            dispatched_ids,
+            notification_ids,
+        )
+
+    @patch(
+        "apps.notifications.services.notification_service.NotificationService"
+        ".create_order_delivered_notification"
+    )
+    def test_delivery_notification_failure_rolls_back_delivery(
+        self,
+        mock_create_notification,
+    ):
+        with self.captureOnCommitCallbacks(execute=True):
+            order_result = OrderService.create_order(
+                validated_data=self.validated_data.copy(),
+                context=self.context,
+            )
+
+        order = order_result.order
+
+        # Move order to SHIPPED first.
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.CONFIRMED,
+        )
+
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.SHIPPED,
+        )
+
+        mock_create_notification.side_effect = Exception("Notification creation failed")
+
+        with self.assertRaises(Exception):
+            OrderService.update_order(
+                order_id=order.id,
+                user=self.user,
+                status=OrderStatus.DELIVERED,
+            )
+
+        order.refresh_from_db()
+
+        # Delivery must be rolled back.
+        self.assertEqual(order.status, OrderStatus.SHIPPED)
+
+        # No delivered notifications should exist.
+        self.assertFalse(
+            Notification.objects.filter(
+                order=order,
+                event_type=NotificationEventType.ORDER_DELIVERED,
+            ).exists()
+        )
+
+    def test_invalid_delivery_transition_creates_no_notifications(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            order_result = OrderService.create_order(
+                validated_data=self.validated_data.copy(),
+                context=self.context,
+            )
+
+        order = order_result.order
+
+        with self.assertRaises(ValidationError):
+            OrderService.update_order(
+                order_id=order.id,
+                user=self.user,
+                status=OrderStatus.DELIVERED,
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(order.status, OrderStatus.PENDING)
+
+        self.assertFalse(
+            Notification.objects.filter(
+                order=order,
+                event_type=NotificationEventType.ORDER_DELIVERED,
+            ).exists()
+        )
+
+    @patch("apps.notifications.tasks.process_notification.delay")
+    def test_delivered_order_non_status_update_creates_no_duplicate_notification(
+        self,
+        mock_process_notification,
+    ):
+        with self.captureOnCommitCallbacks(execute=True):
+            order_result = OrderService.create_order(
+                validated_data=self.validated_data.copy(),
+                context=self.context,
+            )
+
+        order = order_result.order
+
+        # Move order through the lifecycle to DELIVERED.
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.CONFIRMED,
+        )
+
+        OrderService.update_order(
+            order_id=order.id,
+            user=self.user,
+            status=OrderStatus.SHIPPED,
+        )
+
+        mock_process_notification.reset_mock()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            OrderService.update_order(
+                order_id=order.id,
+                user=self.user,
+                status=OrderStatus.DELIVERED,
+            )
+
+        delivered_notifications = Notification.objects.filter(
+            order=order,
+            event_type=NotificationEventType.ORDER_DELIVERED,
+        )
+
+        self.assertEqual(delivered_notifications.count(), 2)
+        self.assertEqual(mock_process_notification.call_count, 2)
+
+        mock_process_notification.reset_mock()
+
+        # Update a non-status field after delivery.
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            OrderService.update_order(
+                order_id=order.id,
+                user=self.user,
+                metadata={"updated": True},
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(order.status, OrderStatus.DELIVERED)
+        self.assertEqual(order.metadata, {"updated": True})
+
+        # No new delivery notifications or Celery tasks.
+        self.assertEqual(
+            Notification.objects.filter(
+                order=order,
+                event_type=NotificationEventType.ORDER_DELIVERED,
+            ).count(),
+            2,
+        )
+        self.assertEqual(len(callbacks), 0)
         mock_process_notification.assert_not_called()
