@@ -9,9 +9,10 @@ from rest_framework.exceptions import ValidationError
 
 from ..notifications.models import Notification
 from ..notifications.models import NotificationEventType, NotificationStatus
-from apps.orders.models import Order, OrderItem, OrderStatus, Product
-from apps.orders.services import OrderService
-from apps.users.models import User
+from .models import Order, OrderItem, OrderStatus, Product
+from .services.order_service import OrderService
+from ..notifications.services.notification_service import NotificationService
+from ..users.models import User
 from common.choices import ChannelType
 
 
