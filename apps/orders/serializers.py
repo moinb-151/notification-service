@@ -2,7 +2,6 @@ from rest_framework import serializers
 
 from ..users.serializers import UserRegistrationSerializer
 from .models import Order, OrderItem, OrderStatus, Product
-from .services import OrderService, ProductService
 
 
 class ProductSerializer(serializers.ModelSerializer):
