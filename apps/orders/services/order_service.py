@@ -214,6 +214,27 @@ class OrderService:
                 NotificationService.dispatch_notification_on_commit(result.notification)
 
     @staticmethod
+    def deliver_order_notifications(order):
+        from common.choices import ChannelType
+        from apps.notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        for channel in (
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+        ):
+            result = NotificationService.create_order_delivered_notification(
+                order=order,
+                channel=channel,
+            )
+
+            if result.created:
+                NotificationService.dispatch_notification_on_commit(
+                    result.notification
+                )
+
+    @staticmethod
     def get_orders(user):
         orders = (
             Order.objects.filter(user=user)
@@ -269,6 +290,12 @@ class OrderService:
                 and new_status == OrderStatus.SHIPPED
             ):
                 OrderService.ship_order_notifications(order)
+
+            if (
+                old_status == OrderStatus.SHIPPED
+                and new_status == OrderStatus.DELIVERED
+            ):
+                OrderService.deliver_order_notifications(order)
 
             return order
         except Order.DoesNotExist:
