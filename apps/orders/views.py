@@ -10,7 +10,8 @@ from .serializers import (
     OrderUpdateSerializer,
     ProductSerializer,
 )
-from .services import OrderService, ProductService
+from .services.order_service import OrderService
+from .services.product_service import ProductService
 
 
 class ProductListCreateView(generics.ListCreateAPIView):
