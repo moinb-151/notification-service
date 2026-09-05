@@ -166,6 +166,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
+            # ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_created_notification(
                 order=order,
@@ -185,6 +186,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
+            # ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_cancelled_notification(
                 order=order,
@@ -204,6 +206,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
+            # ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_shipped_notification(
                 order=order,
@@ -223,6 +226,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
+            # ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_delivered_notification(
                 order=order,
@@ -230,9 +234,7 @@ class OrderService:
             )
 
             if result.created:
-                NotificationService.dispatch_notification_on_commit(
-                    result.notification
-                )
+                NotificationService.dispatch_notification_on_commit(result.notification)
 
     @staticmethod
     def get_orders(user):
