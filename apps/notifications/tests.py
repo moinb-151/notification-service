@@ -14,9 +14,10 @@ from apps.notifications.models import (
     NotificationEventType,
     NotificationStatus,
 )
-from apps.notifications.services.notification_service import NotificationService
-from apps.notifications.transport.redis import RedisTransport
-from apps.users.models import User
+from .services.notification_service import NotificationService
+from .providers.in_app import InAppProvider
+from .transport.redis import RedisTransport
+from ..users.models import User
 
 
 class NotificationReplayTests(TestCase):
@@ -119,6 +120,7 @@ class NotificationReplayTests(TestCase):
 
         mock_delay.assert_not_called()
 
+
 class NotificationReplayAPITests(TestCase):
 
     def setUp(self):
@@ -188,18 +190,14 @@ class NotificationReplayAPITests(TestCase):
             "Notification replay queued successfully.",
         )
 
-        mock_delay.assert_called_once_with(
-            str(self.notification.id)
-        )
+        mock_delay.assert_called_once_with(str(self.notification.id))
 
     def test_replay_nonexistent_notification(self):
         self.client.force_authenticate(user=self.admin)
 
         notification_id = uuid.uuid4()
 
-        response = self.client.post(
-            f"/notifications/replay/{notification_id}/"
-        )
+        response = self.client.post(f"/notifications/replay/{notification_id}/")
 
         self.assertEqual(
             response.status_code,
@@ -228,6 +226,7 @@ class NotificationReplayAPITests(TestCase):
             response.data["detail"],
             "Only notifications with status 'failed' can be replayed.",
         )
+
 
 class RedisTransportTests(TestCase):
 
@@ -259,3 +258,48 @@ class RedisTransportTests(TestCase):
         )
 
         pubsub.close()
+
+
+class InAppProviderTests(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="testpassword",
+        )
+
+    @patch.object(RedisTransport, "publish")
+    def test_in_app_provider_send(self, mock_publish):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="api-replay-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        result = InAppProvider.send(notification)
+
+        expected_channel = f"notification:user:{notification.user_id}"
+        # expected_message = json.dumps(
+        #     {
+        #         "id": str(notification.id),
+        #         "event_type": notification.event_type,
+        #         "payload": notification.payload,
+        #     }
+        # )
+
+        mock_publish.assert_called_once()
+
+        actual_message = json.loads(mock_publish.call_args[1]["message"])
+
+        self.assertEqual(
+            mock_publish.call_args[1]["channel"],
+            expected_channel,
+        )
+
+        self.assertEqual(result, str(notification.id))
+        self.assertEqual(actual_message["id"], str(notification.id))
+        self.assertEqual(actual_message["event_type"], notification.event_type)
+        self.assertEqual(actual_message["payload"], notification.payload)
