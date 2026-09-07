@@ -1,3 +1,4 @@
+import json
 import uuid
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from apps.notifications.models import (
     NotificationStatus,
 )
 from apps.notifications.services.notification_service import NotificationService
+from apps.notifications.transport.redis import RedisTransport
 from apps.users.models import User
 
 
@@ -226,3 +228,34 @@ class NotificationReplayAPITests(TestCase):
             response.data["detail"],
             "Only notifications with status 'failed' can be replayed.",
         )
+
+class RedisTransportTests(TestCase):
+
+    def test_publish_message_is_received_by_subscriber(self):
+        channel = "test-notification-channel"
+        message = {
+            "notification_id": "123",
+            "event_type": "ORDER_CREATED",
+        }
+
+        pubsub = RedisTransport._client.pubsub()
+        pubsub.subscribe(channel)
+
+        # The first message is Redis's subscription confirmation.
+        pubsub.get_message(timeout=1)
+
+        RedisTransport.publish(
+            channel=channel,
+            message=json.dumps(message),
+        )
+
+        received = pubsub.get_message(timeout=1)
+
+        self.assertIsNotNone(received)
+        self.assertEqual(received["type"], "message")
+        self.assertEqual(
+            json.loads(received["data"]),
+            message,
+        )
+
+        pubsub.close()
