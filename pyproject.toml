@@ -20,6 +20,7 @@ dependencies = [
     "redis>=8.0.1",
     "requests>=2.34.2",
     "uuid-utils>=0.16.0",
+    "uvicorn[standard]>=0.52.4",
 ]
 
 [tool.basedpyright]
