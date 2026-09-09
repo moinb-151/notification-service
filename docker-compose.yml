@@ -52,5 +52,37 @@ services:
       timeout: 5s
       retries: 5
 
+  celery-worker:
+    image: notification-service-web
+    container_name: notification-celery-worker
+    env_file:
+      - .env.docker
+    volumes:
+      - ./keys:/app/keys:ro
+    entrypoint: ["/app/entrypoint.sh", "worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  celery-beat:
+    image: notification-service-web
+    container_name: notification-celery-beat
+    env_file:
+      - .env.docker
+    volumes:
+      - ./keys:/app/keys:ro
+    entrypoint: ["/app/entrypoint.sh", "beat"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:
