@@ -151,6 +151,13 @@ CELERY_TASK_QUEUES = [
     ),
 ]
 
+CELERY_BEAT_SCHEDULE = {
+    "process-deferred-notifications": {
+        "task": "apps.notifications.tasks.process_deferred_notifications",
+        "schedule": 60.0,
+    },
+}
+
 NOTIFICATION_MAX_RETRIES = config("NOTIFICATION_MAX_RETRIES", cast=int, default=3)
 NOTIFICATION_RETRY_BACKOFF = config("NOTIFICATION_RETRY_BACKOFF", cast=int, default=60)
 
