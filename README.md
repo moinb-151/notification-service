@@ -4,68 +4,67 @@ A Django-based asynchronous notification service for managing user notification 
 
 ## Stack
 
-* Python 3.13
-* Django 6.0
-* Django REST Framework
-* Simple JWT (cookie-based authentication)
-* PostgreSQL 18
-* Valkey 9.1
-* Uvicorn
-* Docker & Docker Compose
-* uv
+- Python 3.13
+- Django 6.0
+- Django REST Framework
+- Simple JWT (cookie-based authentication)
+- PostgreSQL 18
+- Valkey 9.1.2
+- RabbitMQ 3.13
+- Uvicorn
+- Docker & Docker Compose
+- uv
 
 ## Features
 
-* User registration and authentication
-* JWT authentication via HTTP-only cookies
-* Token refresh and logout with token blacklisting
-* Per-user notification preferences
-* Notification template management
-* Multi-channel notification support
-* Notification status and failure tracking
-* Scheduled/deferred notifications
-* Health check endpoint
-* Containerized development environment
+- User registration and authentication
+- JWT authentication via HTTP-only cookies
+- Token refresh and logout with token blacklisting
+- Per-user notification preferences
+- Notification template management
+- Multi-channel notification support
+- Notification status and failure tracking
+- Scheduled/deferred notifications
+- Health check endpoint
+- Containerized development environment
+- Asynchronous notification processing with Celery (application configuration present; worker deployment is part of the next infrastructure stage)
 
 ## Architecture
 
 The service is designed around asynchronous notification processing.
 
-Current infrastructure:
+Current Docker infrastructure:
 
 ```text
-                    ┌────────────────────┐
-                    │      Client        │
-                    └─────────┬──────────┘
-                              │
-                              ▼
-                    ┌────────────────────┐
-                    │ Django / Uvicorn   │
-                    │      :8000         │
-                    └──────┬───────┬─────┘
-                           │       │
-                  ┌────────┘       └────────┐
-                  ▼                         ▼
-        ┌──────────────────┐       ┌──────────────────┐
-        │   PostgreSQL     │       │     Valkey       │
-        │      :5432       │       │      :6379       │
-        └──────────────────┘       └──────────────────┘
+                    ┌──────────────────┐
+                    │ Django / Uvicorn │
+                    │      :8000       │
+                    └───────┬──────────┘
+                            │
+             ┌──────────────┼──────────────┐
+             ▼              ▼              ▼
+        PostgreSQL        Valkey       RabbitMQ
+          :5432           :6379          :5672
+        persistent       cache          broker
 ```
 
 PostgreSQL is the primary persistent data store.
 
-Valkey is used for application caching and will also serve as the Celery result backend.
+Valkey is used for application caching and the Celery result backend.
 
-Additional asynchronous infrastructure, including RabbitMQ and Celery workers, will be added as the project progresses.
+RabbitMQ is used as the Celery message broker.
+
+The RabbitMQ management UI is exposed to the host on port `15672` for local development.
 
 ## Local Development
 
 ### Prerequisites
 
-* Python 3.13
-* uv
-* PostgreSQL
-* Valkey/Redis-compatible server
+- Python 3.13
+- uv
+- PostgreSQL
+- Valkey/Redis-compatible server
+- RabbitMQ
 
 Install dependencies:
 
@@ -101,11 +100,12 @@ python manage.py runserver
 
 The project includes a Docker Compose environment containing:
 
-* Django/Uvicorn
-* PostgreSQL 18
-* Valkey 9.1.2
+- Django/Uvicorn
+- PostgreSQL 18
+- Valkey 9.1.2
+- RabbitMQ 3.13 with the management plugin
 
-The Django image uses a multi-stage build with `uv` to install production dependencies.
+The Django image uses a multi-stage build with `uv` to install dependencies.
 
 ### Environment
 
@@ -121,6 +121,7 @@ The Docker environment uses Compose service names for internal communication:
 DB_HOST=postgres
 REDIS_URL=redis://valkey:6379/1
 CELERY_RESULT_BACKEND=redis://valkey:6379/0
+CELERY_BROKER_URL=amqp://notification_user:notification_password@rabbitmq:5672/notification_vhost
 ```
 
 `.env.docker` should not be committed to the repository.
@@ -163,6 +164,8 @@ This allows the PostgreSQL database to survive container recreation.
 
 Valkey currently does not use a persistent volume because it is used for cache data and Celery result storage rather than as the source of truth for application data.
 
+RabbitMQ persistence will be configured according to the durability requirements of the asynchronous processing infrastructure as the Celery queue topology is finalized.
+
 ### Application Startup
 
 The Django container uses `entrypoint.sh` to perform application initialization before starting Uvicorn.
@@ -188,6 +191,35 @@ Start Uvicorn
 Database migrations are automatically executed when the web container starts.
 
 The entrypoint uses `exec` when starting Uvicorn so that Uvicorn becomes the container's main process and receives container signals correctly.
+
+### Service Health
+
+PostgreSQL, Valkey, and RabbitMQ have Docker healthchecks.
+
+The web service exposes an application-level health endpoint.
+
+## RabbitMQ
+
+RabbitMQ is configured with:
+
+- User: `notification_user`
+- Virtual host: `notification_vhost`
+- AMQP port: `5672`
+- Management UI port: `15672`
+
+Containers communicate with RabbitMQ through:
+
+```text
+rabbitmq:5672
+```
+
+The AMQP port does not need to be published to the host because Docker Compose provides service-to-service networking.
+
+The management UI is available locally at:
+
+```text
+http://localhost:15672
+```
 
 ## Health Check
 
@@ -217,45 +249,45 @@ This endpoint currently provides a basic application liveness check.
 
 ### Health
 
-| Method | Endpoint   | Description              |
-| ------ | ---------- | ------------------------ |
-| `GET`  | `/health/` | Application health check |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health/` | Application health check |
 
 ### Authentication
 
-| Method | Endpoint              | Description                         |
-| ------ | --------------------- | ----------------------------------- |
-| `POST` | `/api/auth/register/` | Register a new user                 |
-| `POST` | `/api/auth/login/`    | Login and receive tokens as cookies |
-| `POST` | `/api/auth/refresh/`  | Refresh access token                |
-| `POST` | `/api/auth/logout/`   | Logout and clear cookies            |
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/auth/register/` | Register a new user |
+| `POST` | `/api/auth/login/` | Login and receive tokens as cookies |
+| `POST` | `/api/auth/refresh/` | Refresh access token |
+| `POST` | `/api/auth/logout/` | Logout and clear cookies |
 
 ### Notifications
 
-| Method  | Endpoint                          | Description                       |
-| ------- | --------------------------------- | --------------------------------- |
-| `GET`   | `/api/notifications/preferences/` | Get user notification preferences |
-| `PATCH` | `/api/notifications/preferences/` | Update notification preferences   |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/notifications/preferences/` | Get user notification preferences |
+| `PATCH` | `/api/notifications/preferences/` | Update notification preferences |
 
 ## Environment Variables
 
 Application configuration is loaded through environment variables.
 
-| Variable                | Description                           |
-| ----------------------- | ------------------------------------- |
-| `SECRET_KEY`            | Django secret key                     |
-| `DEBUG`                 | Enable/disable Django debug mode      |
-| `ALLOWED_HOSTS`         | Comma-separated list of allowed hosts |
-| `DB_NAME`               | PostgreSQL database name              |
-| `DB_USER`               | PostgreSQL database user              |
-| `DB_PASSWORD`           | PostgreSQL database password          |
-| `DB_HOST`               | PostgreSQL hostname                   |
-| `DB_PORT`               | PostgreSQL port                       |
-| `REDIS_URL`             | Valkey/Redis connection URL           |
-| `CELERY_BROKER_URL`     | Celery message broker URL             |
-| `CELERY_RESULT_BACKEND` | Celery result backend URL             |
+| Variable | Description |
+|---|---|
+| `SECRET_KEY` | Django secret key |
+| `DEBUG` | Enable/disable Django debug mode |
+| `ALLOWED_HOSTS` | Comma-separated list of allowed hosts |
+| `DB_NAME` | PostgreSQL database name |
+| `DB_USER` | PostgreSQL database user |
+| `DB_PASSWORD` | PostgreSQL database password |
+| `DB_HOST` | PostgreSQL hostname |
+| `DB_PORT` | PostgreSQL port |
+| `REDIS_URL` | Valkey/Redis connection URL |
+| `CELERY_BROKER_URL` | Celery message broker URL |
+| `CELERY_RESULT_BACKEND` | Celery result backend URL |
 
-Values differ between local development and Docker environments, while the application variable names remain the same.
+Environment-specific values are supplied through separate environment files while keeping the application variable names consistent.
 
 ## Project Structure
 
@@ -287,29 +319,30 @@ The `keys/` directory contains runtime cryptographic keys and is excluded from t
 
 ## Authentication Notes
 
-* Auth tokens are stored as HTTP-only cookies rather than `localStorage`.
-* Refresh tokens are blacklisted on logout and rotation.
-* Notification preferences are automatically seeded for supported channels when a user is created.
+- Auth tokens are stored as HTTP-only cookies rather than `localStorage`.
+- Refresh tokens are blacklisted on logout and rotation.
+- Notification preferences are automatically seeded for supported channels when a user is created.
 
 ## Current Docker Services
 
-| Service    | Image                   |   Port | Purpose                         |
-| ---------- | ----------------------- | -----: | ------------------------------- |
-| `web`      | Local application image | `8000` | Django + Uvicorn                |
-| `postgres` | PostgreSQL 18           | `5432` | Primary database                |
-| `valkey`   | Valkey 9.1.2            | `6379` | Cache and Celery result backend |
+| Service | Image | Port | Purpose |
+|---|---|---:|---|
+| `web` | Local application image | `8000` | Django + Uvicorn |
+| `postgres` | PostgreSQL 18 | `5432` (internal) | Primary database |
+| `valkey` | Valkey 9.1.2 | `6379` (internal) | Cache and Celery result backend |
+| `rabbitmq` | RabbitMQ 3.13 Management | `5672` (internal), `15672` (host) | Celery message broker + management UI |
 
 ## Roadmap
 
 Planned infrastructure and functionality include:
 
-* RabbitMQ message broker
-* Celery workers
-* Celery Beat
-* Priority notification queues
-* Dead-letter queues
-* Retry and failure handling
-* Nginx reverse proxy
-* WebSocket/SSE-based in-app notifications
-* Production deployment configuration
-* Deeper application readiness checks
+- Celery worker containers
+- Celery Beat container
+- Priority notification queues
+- RabbitMQ topic exchanges and bindings
+- Dead-letter queues
+- Retry and failure handling
+- Nginx reverse proxy
+- WebSocket/SSE-based in-app notifications
+- Production deployment configuration
+- Deeper application readiness checks
