@@ -37,5 +37,20 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: notification-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: notification_user
+      RABBITMQ_DEFAULT_PASS: notification_password
+      RABBITMQ_DEFAULT_VHOST: notification_vhost
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
