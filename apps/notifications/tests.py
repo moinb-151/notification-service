@@ -11,10 +11,14 @@ from rest_framework.test import APIClient
 from apps.notifications.models import (
     ChannelType,
     Notification,
+    NotificationTemplate,
     NotificationEventType,
     NotificationStatus,
 )
+
+from ..users.models import NotificationPreference
 from .services.notification_service import NotificationService
+from .services.notification_template_service import NotificationTemplateService
 from .providers.in_app import InAppProvider
 from .transport.redis import RedisTransport
 from ..users.models import User
@@ -268,6 +272,12 @@ class InAppProviderTests(TestCase):
             password="testpassword",
         )
 
+        # self.preference = NotificationPreference.objects.create(
+        #     user=self.user,
+        #     channel=ChannelType.IN_APP,
+        #     enabled=True,
+        # )
+
     @patch.object(RedisTransport, "publish")
     def test_in_app_provider_send(self, mock_publish):
         notification = Notification.objects.create(
@@ -279,7 +289,11 @@ class InAppProviderTests(TestCase):
             payload={"name": "John Doe"},
         )
 
-        result = InAppProvider.send(notification)
+        result = InAppProvider.send(
+            notification,
+            title="Test notification",
+            body="This is a test notification.",
+        )
 
         expected_channel = f"notification:user:{notification.user_id}"
         # expected_message = json.dumps(
@@ -302,4 +316,65 @@ class InAppProviderTests(TestCase):
         self.assertEqual(result, str(notification.id))
         self.assertEqual(actual_message["id"], str(notification.id))
         self.assertEqual(actual_message["event_type"], notification.event_type)
+        self.assertEqual(actual_message["title"], "Test notification")
+        self.assertEqual(actual_message["body"], "This is a test notification.")
         self.assertEqual(actual_message["payload"], notification.payload)
+
+    @patch("apps.notifications.tasks.InAppProvider.send")
+    def test_process_notification_in_app_channel(self, mock_send):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="process-in-app-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        mock_send.return_value = str(notification.id)
+
+        from apps.notifications.tasks import process_notification
+
+        preference = NotificationPreference.objects.get(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+        )
+
+        NotificationTemplate.objects.create(
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            channel=ChannelType.IN_APP,
+            subject="This is Test Notification",
+            body_template=(
+                "Hello {{ name }},\n\n"
+                "This is a test notification from notification service.\n\n"
+                "Your notification system is working correctly.\n\n"
+                "Regards,\n"
+                "Notification Service"
+            ),
+        )
+
+        process_notification(str(notification.id))
+
+        mock_send.assert_called_once_with(
+            notification,
+            title="This is Test Notification",
+            body=(
+                "Hello John Doe,\n\n"
+                "This is a test notification from notification service.\n\n"
+                "Your notification system is working correctly.\n\n"
+                "Regards,\n"
+                "Notification Service"
+            ),
+        )
+
+        notification.refresh_from_db()
+
+        self.assertEqual(
+            notification.status,
+            NotificationStatus.SENT,
+        )
+
+        self.assertEqual(
+            notification.provider_message_id,
+            str(notification.id),
+        )
