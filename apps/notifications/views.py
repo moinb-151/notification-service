@@ -1,3 +1,7 @@
+import json
+from django.http import StreamingHttpResponse, JsonResponse
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +14,10 @@ from .serializers import (
 )
 from .services.notification_preference_service import NotificationPreferenceService
 from .services.notification_service import NotificationService
+
+from .transport.redis import RedisTransport
+
+from ..users.authentication import CustomJWTAuthentication
 
 
 class NotificationListView(generics.ListAPIView):
@@ -125,7 +133,65 @@ class NotificationPreferenceView(APIView):
             status=status.HTTP_200_OK,
         )
 
-#Admin 
+
+def notification_stream(request):
+    authentication = CustomJWTAuthentication()
+
+    try:
+        result = authentication.authenticate(request)
+    except (AuthenticationFailed, InvalidToken):
+        return JsonResponse(
+            {"detail": "Authentication credentials were not provided or are invalid."},
+            status=401,
+        )
+
+    if result is None:
+        return JsonResponse(
+            {"detail": "Authentication credentials were not provided."},
+            status=401,
+        )
+
+    user, _ = result
+    user_id = user.id
+    channel = f"notification:user:{user_id}"
+
+    def event_stream():
+        pubsub = RedisTransport._client.pubsub()
+        pubsub.subscribe(channel)
+
+        try:
+            while True:
+                message = pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=15,
+                )
+
+                if message is None:
+                    yield ": heartbeat\n\n"
+                    continue
+
+                data = json.loads(message["data"])
+
+                yield (
+                    f"id: {data['id']}\n"
+                    "event: notification\n"
+                    f"data: {message['data']}\n\n"
+                )
+
+        finally:
+            pubsub.close()
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type="text/event-stream",
+    )
+
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    
+    return response
+
+# Admin
 
 class NotificationReplayView(APIView):
     permission_classes = [permissions.IsAdminUser]
