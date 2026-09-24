@@ -8,6 +8,7 @@ from common.choices import ChannelType
 from .models import Notification, NotificationStatus, NotificationEventType
 from .providers.email import EmailProvider
 from .providers.sms import SMSProvider
+from .providers.in_app import InAppProvider
 from .services.notification_preference_service import NotificationPreferenceService
 from .services.notification_service import NotificationService
 from .services.notification_template_service import NotificationTemplateService
@@ -99,6 +100,14 @@ def process_notification(self, notification_id):
                     phone_number=notification.user.phone,
                     message=body,
                 )
+
+            case ChannelType.IN_APP:
+                message_id = InAppProvider.send(
+                    notification,
+                    title=subject,
+                    body=body,
+                )
+
             case _:
                 NotificationService.record_failure(
                     notification_id=notification.id,
