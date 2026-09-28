@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.db import transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -378,3 +379,113 @@ class InAppProviderTests(TestCase):
             notification.provider_message_id,
             str(notification.id),
         )
+
+
+class NotificationServiceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="testpassword",
+        )
+
+        self.other_user = User.objects.create_user(
+            email="other@example.com",
+            password="testpassword",
+        )
+
+    def test_return_notification_after_cursor(self):
+        notifications = []
+        for i in range(3):
+            notifications.append(
+                Notification.objects.create(
+                    user=self.user,
+                    channel=ChannelType.EMAIL,
+                    event_type=NotificationEventType.TEST_NOTIFICATION,
+                    status=NotificationStatus.PENDING,
+                    idempotency_key=f"cursor-test-key-{i}",
+                    payload={"name": f"User {i}"},
+                )
+            )
+
+        cursor = str(notifications[1].id)
+
+        result = NotificationService.get_notifications_after(self.user, cursor)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, notifications[2].id)
+
+    def test_other_user_cannot_access_notifications(self):
+        notification = Notification.objects.create(
+            user=self.other_user,
+            channel=ChannelType.EMAIL,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="access-test-key",
+            payload={"name": "User"},
+        )
+
+        result = NotificationService.get_notifications_after(
+            self.user, str(notification.id)
+        )
+
+        self.assertEqual(len(result), 0)
+
+    def test_unknown_notification_id_returns_empty(self):
+        unknown_id = str(uuid.uuid4())
+
+        result = NotificationService.get_notifications_after(self.user, unknown_id)
+
+        self.assertEqual(len(result), 0)
+
+    def test_chronological_order_of_notifications(self):
+        notifications = []
+        for i in range(5):
+            notifications.append(
+                Notification.objects.create(
+                    user=self.user,
+                    channel=ChannelType.EMAIL,
+                    event_type=NotificationEventType.TEST_NOTIFICATION,
+                    status=NotificationStatus.PENDING,
+                    idempotency_key=f"order-test-key-{i}",
+                    payload={"name": f"User {i}"},
+                )
+            )
+
+        result = NotificationService.get_notifications_after(
+            self.user, str(notifications[0].id)
+        )
+
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result[0].id, notifications[1].id)
+        self.assertEqual(result[1].id, notifications[2].id)
+        self.assertEqual(result[2].id, notifications[3].id)
+        self.assertEqual(result[3].id, notifications[4].id)
+
+    def test_notifications_with_same_created_at_are_ordered_deterministically(self):
+        created_at = timezone.now()
+
+        notifications = []
+
+        for i in range(2):
+            notifications.append(
+                Notification.objects.create(
+                    user=self.user,
+                    channel=ChannelType.EMAIL,
+                    event_type=NotificationEventType.TEST_NOTIFICATION,
+                    status=NotificationStatus.PENDING,
+                    idempotency_key=f"same-time-test-key-{i}",
+                    payload={"name": f"User {i}"},
+                )
+            )
+
+        Notification.objects.filter(
+            id__in=[notification.id for notification in notifications]
+        ).update(created_at=created_at)
+
+        result = NotificationService.get_notifications_after(
+            self.user,
+            str(notifications[0].id),
+        )
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].id, notifications[1].id)
