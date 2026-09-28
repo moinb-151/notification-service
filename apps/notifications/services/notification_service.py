@@ -2,6 +2,7 @@ import hashlib
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from ..models import Notification, NotificationStatus, NotificationEventType
@@ -211,9 +212,7 @@ class NotificationService:
     def dispatch_notification_on_commit(notification):
         from ..tasks import process_notification
 
-        transaction.on_commit(
-            lambda: process_notification.delay(str(notification.id))
-        )
+        transaction.on_commit(lambda: process_notification.delay(str(notification.id)))
 
     @staticmethod
     @transaction.atomic
@@ -363,3 +362,25 @@ class NotificationService:
 
         except Notification.DoesNotExist:
             return None
+
+    @staticmethod
+    def get_notifications_after(user, last_event_id):
+        try:
+            last_notification = Notification.objects.get(
+                id=last_event_id,
+                user=user,
+            )
+        except Notification.DoesNotExist:
+            return Notification.objects.none()
+
+        return (
+            Notification.objects.filter(
+                Q(created_at__gt=last_notification.created_at)
+                | Q(
+                    created_at=last_notification.created_at, id__gt=last_notification.id
+                ),
+                user=user,
+            )
+            .select_related("user", "order")
+            .order_by("created_at", "id")
+        )
