@@ -409,7 +409,7 @@ class NotificationServiceTests(TestCase):
 
         cursor = str(notifications[1].id)
 
-        result = NotificationService.get_notifications_after(self.user, cursor)
+        result = NotificationService.get_notifications_after(self.user, cursor, ChannelType.EMAIL)
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, notifications[2].id)
@@ -425,7 +425,7 @@ class NotificationServiceTests(TestCase):
         )
 
         result = NotificationService.get_notifications_after(
-            self.user, str(notification.id)
+            self.user, str(notification.id), ChannelType.EMAIL
         )
 
         self.assertEqual(len(result), 0)
@@ -433,7 +433,7 @@ class NotificationServiceTests(TestCase):
     def test_unknown_notification_id_returns_empty(self):
         unknown_id = str(uuid.uuid4())
 
-        result = NotificationService.get_notifications_after(self.user, unknown_id)
+        result = NotificationService.get_notifications_after(self.user, unknown_id, ChannelType.EMAIL)
 
         self.assertEqual(len(result), 0)
 
@@ -452,7 +452,9 @@ class NotificationServiceTests(TestCase):
             )
 
         result = NotificationService.get_notifications_after(
-            self.user, str(notifications[0].id)
+            self.user, 
+            str(notifications[0].id),
+            ChannelType.EMAIL
         )
 
         self.assertEqual(len(result), 4)
@@ -485,6 +487,7 @@ class NotificationServiceTests(TestCase):
         result = NotificationService.get_notifications_after(
             self.user,
             str(notifications[0].id),
+            ChannelType.EMAIL
         )
 
         self.assertEqual(len(result), 1)
