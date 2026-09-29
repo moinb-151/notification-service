@@ -364,11 +364,10 @@ class NotificationService:
             return None
 
     @staticmethod
-    def get_notifications_after(user, last_event_id):
+    def get_notifications_after(user, last_event_id, channel):
         try:
             last_notification = Notification.objects.get(
-                id=last_event_id,
-                user=user,
+                id=last_event_id, user=user, channel=channel
             )
         except Notification.DoesNotExist:
             return Notification.objects.none()
@@ -380,6 +379,7 @@ class NotificationService:
                     created_at=last_notification.created_at, id__gt=last_notification.id
                 ),
                 user=user,
+                channel=channel,
             )
             .select_related("user", "order")
             .order_by("created_at", "id")
