@@ -14,6 +14,9 @@ from .serializers import (
 )
 from .services.notification_preference_service import NotificationPreferenceService
 from .services.notification_service import NotificationService
+from .services.notification_template_service import NotificationTemplateService
+
+from common.choices import ChannelType
 
 from .transport.redis import RedisTransport
 
@@ -136,6 +139,7 @@ class NotificationPreferenceView(APIView):
 
 def notification_stream(request):
     authentication = CustomJWTAuthentication()
+    last_event_id = request.headers.get("Last-Event-ID")
 
     try:
         result = authentication.authenticate(request)
@@ -156,6 +160,42 @@ def notification_stream(request):
     channel = f"notification:user:{user_id}"
 
     def event_stream():
+        if last_event_id:
+            missed_notifications = NotificationService.get_notifications_after(
+                user=user,
+                last_event_id=last_event_id,
+                channel=ChannelType.IN_APP,
+            )
+            
+            for missed_notification in missed_notifications:
+                template = NotificationTemplateService.get_template(
+                    event_type=missed_notification.event_type,
+                    channel=missed_notification.channel,
+                )
+
+                if template is None:
+                    continue
+
+                subject, body = NotificationTemplateService.render_template(
+                    template=template, context=missed_notification.payload
+                )
+
+                sse_message = json.dumps(
+                    {
+                        "id": str(missed_notification.id),
+                        "event_type": missed_notification.event_type,
+                        "title": subject,
+                        "body": body,
+                        "payload": missed_notification.payload,
+                    }
+                )
+
+                yield (
+                    f"id: {str(missed_notification.id)}\n"
+                    "event: notification\n"
+                    f"data: {sse_message}\n\n"
+                )
+
         pubsub = RedisTransport._client.pubsub()
         pubsub.subscribe(channel)
 
@@ -188,10 +228,12 @@ def notification_stream(request):
 
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
-    
+
     return response
 
+
 # Admin
+
 
 class NotificationReplayView(APIView):
     permission_classes = [permissions.IsAdminUser]
