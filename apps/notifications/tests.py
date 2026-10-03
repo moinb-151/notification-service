@@ -492,3 +492,31 @@ class NotificationServiceTests(TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, notifications[1].id)
+
+class NotificationStreamTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="testpassword",
+        )
+
+        self.url = "/notifications/stream/"
+
+    def test_replay_missed_notifications(self):
+        notifications = []
+
+        for i in range(3):
+            notifications.append(
+                Notification.objects.create(
+                    user=self.user,
+                    channel=ChannelType.IN_APP,
+                    event_type=NotificationEventType.TEST_NOTIFICATION,
+                    status=NotificationStatus.PENDING,
+                    idempotency_key=f"stream-test-key-{i}",
+                    payload={"name": f"User {i}"},
+                )
+            )
+
+        
