@@ -571,6 +571,99 @@ class NotificationStreamTests(TestCase):
 
         self.assertIn("event: notification", stream)
 
+    @patch("apps.notifications.views.NotificationService.get_notifications_after")
+    @patch("apps.notifications.views.RedisTransport._client.pubsub")
+    def test_recovery_deduplicates_live_notification(self, mock_pubsub_method, mock_get_notifications_after):
+        notifications = []
+
+        for i in range(2):
+            notifications.append(
+                Notification.objects.create(
+                    user=self.user,
+                    channel=ChannelType.IN_APP,
+                    event_type=NotificationEventType.TEST_NOTIFICATION,
+                    status=NotificationStatus.PENDING,
+                    idempotency_key=f"stream-dedup-test-key-{i}",
+                    payload={"name": f"User {i}"},
+                )
+            )
+
+        new_notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="stream-dedup-test-key-2",
+            payload={"name": "User 2"},
+        )
+
+        mock_pubsub = mock_pubsub_method.return_value
+        mock_get_notifications_after.return_value = [notifications[1]]
+
+        duplicate_message = {
+            "type": "message",
+            "data": json.dumps(
+                {
+                    "id": str(notifications[1].id),
+                    "event_type": notifications[1].event_type,
+                    "title": "This is Test Notification",
+                    "body": "Recovered notification",
+                    "payload": notifications[1].payload,
+                }
+            ),
+        }
+
+        new_message = {
+            "type": "message",
+            "data": json.dumps(
+                {
+                    "id": str(new_notification.id),
+                    "event_type": new_notification.event_type,
+                    "title": "This is Test Notification",
+                    "body": "New notification",
+                    "payload": new_notification.payload,
+                }
+            ),
+        }
+
+        mock_pubsub.get_message.side_effect = [
+            duplicate_message,
+            new_message,
+            RuntimeError("Stop SSE test"),
+        ]
+
+        token = AccessToken.for_user(self.user)
+
+        self.client.cookies["access_token"] = str(token)
+
+        last_event_id = str(notifications[0].id)
+
+        response = self.client.get(
+            self.url,
+            HTTP_LAST_EVENT_ID=last_event_id,
+        )
+
+        chunks = []
+
+        try:
+            for chunk in response.streaming_content:
+                chunks.append(chunk.decode("utf-8"))
+        except RuntimeError as exc:
+            self.assertEqual(str(exc), "Stop SSE test")
+
+        stream = "".join(chunks)
+
+        self.assertNotIn(str(notifications[0].id), stream)
+        self.assertEqual(
+            stream.count(f"id: {notifications[1].id}\n"),
+            1,
+        )
+
+        self.assertEqual(
+            stream.count(f"id: {new_notification.id}\n"),
+            1,
+        )
+
     @patch("apps.notifications.views.RedisTransport._client.pubsub")
     def test_stream_channel_filtering(self, mock_pubsub_method):
 
