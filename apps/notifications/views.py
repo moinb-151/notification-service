@@ -160,46 +160,50 @@ def notification_stream(request):
     channel = f"notification:user:{user_id}"
 
     def event_stream():
-        if last_event_id:
-            missed_notifications = NotificationService.get_notifications_after(
-                user=user,
-                last_event_id=last_event_id,
-                channel=ChannelType.IN_APP,
-            )
-            
-            for missed_notification in missed_notifications:
-                template = NotificationTemplateService.get_template(
-                    event_type=missed_notification.event_type,
-                    channel=missed_notification.channel,
-                )
-
-                if template is None:
-                    continue
-
-                subject, body = NotificationTemplateService.render_template(
-                    template=template, context=missed_notification.payload
-                )
-
-                sse_message = json.dumps(
-                    {
-                        "id": str(missed_notification.id),
-                        "event_type": missed_notification.event_type,
-                        "title": subject,
-                        "body": body,
-                        "payload": missed_notification.payload,
-                    }
-                )
-
-                yield (
-                    f"id: {str(missed_notification.id)}\n"
-                    "event: notification\n"
-                    f"data: {sse_message}\n\n"
-                )
-
         pubsub = RedisTransport._client.pubsub()
-        pubsub.subscribe(channel)
+        recovered_ids = set()
 
         try:
+            pubsub.subscribe(channel)
+
+            if last_event_id:
+                missed_notifications = NotificationService.get_notifications_after(
+                    user=user,
+                    last_event_id=last_event_id,
+                    channel=ChannelType.IN_APP,
+                )
+
+                for missed_notification in missed_notifications:
+                    template = NotificationTemplateService.get_template(
+                        event_type=missed_notification.event_type,
+                        channel=missed_notification.channel,
+                    )
+
+                    if template is None:
+                        continue
+
+                    subject, body = NotificationTemplateService.render_template(
+                        template=template, context=missed_notification.payload
+                    )
+
+                    sse_message = json.dumps(
+                        {
+                            "id": str(missed_notification.id),
+                            "event_type": missed_notification.event_type,
+                            "title": subject,
+                            "body": body,
+                            "payload": missed_notification.payload,
+                        }
+                    )
+
+                    recovered_ids.add(str(missed_notification.id))
+
+                    yield (
+                        f"id: {str(missed_notification.id)}\n"
+                        "event: notification\n"
+                        f"data: {sse_message}\n\n"
+                    )
+
             while True:
                 message = pubsub.get_message(
                     ignore_subscribe_messages=True,
@@ -211,6 +215,9 @@ def notification_stream(request):
                     continue
 
                 data = json.loads(message["data"])
+
+                if str(data["id"]) in recovered_ids:
+                    continue
 
                 yield (
                     f"id: {data['id']}\n"
