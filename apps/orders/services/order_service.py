@@ -166,7 +166,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
-            # ChannelType.IN_APP,
+            ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_created_notification(
                 order=order,
@@ -186,7 +186,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
-            # ChannelType.IN_APP,
+            ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_cancelled_notification(
                 order=order,
@@ -206,7 +206,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
-            # ChannelType.IN_APP,
+            ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_shipped_notification(
                 order=order,
@@ -226,7 +226,7 @@ class OrderService:
         for channel in (
             ChannelType.EMAIL,
             ChannelType.SMS,
-            # ChannelType.IN_APP,
+            ChannelType.IN_APP,
         ):
             result = NotificationService.create_order_delivered_notification(
                 order=order,
