@@ -12,7 +12,7 @@ def create_notification_templates(apps, schema_editor):
         # ORDER_CREATED
         {
             "event_type": "ORDER_CREATED",
-            "channel": "EMAIL",
+            "channel": "email",
             "subject": "Order Confirmed — {{ order_id }}",
             "body_template": """Hello {{ metadata.shipping_address.name }},
 
@@ -37,7 +37,7 @@ Thank you for your order.""",
         },
         {
             "event_type": "ORDER_CREATED",
-            "channel": "SMS",
+            "channel": "sms",
             "subject": "",
             "body_template": (
                 "Your order {{ order_id }} has been placed successfully. "
@@ -46,7 +46,7 @@ Thank you for your order.""",
         },
         {
             "event_type": "ORDER_CREATED",
-            "channel": "IN_APP",
+            "channel": "in_app",
             "subject": "Order Confirmed",
             "body_template": (
                 "Your order {{ order_id }} has been placed successfully. "
@@ -57,7 +57,7 @@ Thank you for your order.""",
         # ORDER_CANCELLED
         {
             "event_type": "ORDER_CANCELLED",
-            "channel": "EMAIL",
+            "channel": "email",
             "subject": "Order Cancelled — {{ order_id }}",
             "body_template": """Hello {{ metadata.shipping_address.name }},
 
@@ -74,7 +74,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_CANCELLED",
-            "channel": "SMS",
+            "channel": "sms",
             "subject": "",
             "body_template": (
                 "Your order {{ order_id }} has been cancelled. "
@@ -83,7 +83,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_CANCELLED",
-            "channel": "IN_APP",
+            "channel": "in_app",
             "subject": "Order Cancelled",
             "body_template": (
                 "Your order {{ order_id }} has been cancelled."
@@ -93,7 +93,7 @@ Notification Service""",
         # ORDER_SHIPPED
         {
             "event_type": "ORDER_SHIPPED",
-            "channel": "EMAIL",
+            "channel": "email",
             "subject": "Your Order Has Shipped — {{ order_id }}",
             "body_template": """Hello {{ metadata.shipping_address.name }},
 
@@ -117,7 +117,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_SHIPPED",
-            "channel": "SMS",
+            "channel": "sms",
             "subject": "",
             "body_template": (
                 "Your order {{ order_id }} has been shipped and is on its way. "
@@ -126,7 +126,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_SHIPPED",
-            "channel": "IN_APP",
+            "channel": "in_app",
             "subject": "Order Shipped",
             "body_template": (
                 "Your order {{ order_id }} has been shipped and is on its way."
@@ -136,7 +136,7 @@ Notification Service""",
         # ORDER_DELIVERED
         {
             "event_type": "ORDER_DELIVERED",
-            "channel": "EMAIL",
+            "channel": "email",
             "subject": "Order Delivered — {{ order_id }}",
             "body_template": """Hello {{ metadata.shipping_address.name }},
 
@@ -155,7 +155,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_DELIVERED",
-            "channel": "SMS",
+            "channel": "sms",
             "subject": "",
             "body_template": (
                 "Your order {{ order_id }} has been delivered successfully. "
@@ -164,7 +164,7 @@ Notification Service""",
         },
         {
             "event_type": "ORDER_DELIVERED",
-            "channel": "IN_APP",
+            "channel": "in_app",
             "subject": "Order Delivered",
             "body_template": (
                 "Your order {{ order_id }} has been delivered successfully."
@@ -199,7 +199,7 @@ def remove_notification_templates(apps, schema_editor):
 
     NotificationTemplate.objects.filter(
         event_type__in=order_event_types,
-        channel__in=["EMAIL", "SMS", "IN_APP"],
+        channel__in=["email", "sms", "in_app"],
         version=1,
     ).delete()
 
