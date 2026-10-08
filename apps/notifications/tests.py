@@ -747,3 +747,92 @@ class NotificationStreamTests(TestCase):
             response.json(),
             {"detail": "Authentication credentials were not provided."},
         )
+
+class NotificationTemplateServiceTests(TestCase):
+
+    def test_order_templates_exist_for_all_channels(self):
+        event_types = [
+            NotificationEventType.ORDER_CREATED,
+            NotificationEventType.ORDER_CANCELLED,
+            NotificationEventType.ORDER_SHIPPED,
+            NotificationEventType.ORDER_DELIVERED,
+        ]
+
+        channels = [
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+            ChannelType.IN_APP,
+        ]
+
+        for event_type in event_types:
+            for channel in channels:
+                template = NotificationTemplateService.get_template(
+                    event_type=event_type,
+                    channel=channel,
+                )
+
+                self.assertIsNotNone(
+                    template,
+                    f"Missing template: {event_type} / {channel}",
+                )
+
+    def test_get_template_returns_none_when_template_does_not_exist(self):
+        template = NotificationTemplateService.get_template(
+            event_type=NotificationEventType.ORDER_CREATED,
+            channel="nonexistent",
+        )
+
+        self.assertIsNone(template)
+
+    def test_order_templates_render_successfully(self):
+        context = {
+            "order_id": "019ed145-6499-7121-9cdc-8715a96d9a62",
+            "order_status": "PENDING",
+            "total_amount": "1500.00",
+            "metadata": {
+                "shipping_address": {
+                    "name": "Moin Bagban",
+                    "line1": "123 MG Road",
+                    "line2": "Near City Mall",
+                    "city": "Pune",
+                    "state": "Maharashtra",
+                    "country": "India",
+                    "postal_code": "411001",
+                },
+                "notes": "Please deliver between 10 AM and 1 PM.",
+                "gift": False,
+            },
+        }
+
+        event_types = [
+            NotificationEventType.ORDER_CREATED,
+            NotificationEventType.ORDER_CANCELLED,
+            NotificationEventType.ORDER_SHIPPED,
+            NotificationEventType.ORDER_DELIVERED,
+        ]
+
+        channels = [
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+            ChannelType.IN_APP,
+        ]
+
+        for event_type in event_types:
+            for channel in channels:
+                template = NotificationTemplateService.get_template(
+                    event_type=event_type,
+                    channel=channel,
+                )
+
+                self.assertIsNotNone(template)
+
+                subject, body = NotificationTemplateService.render_template(
+                    template=template,
+                    context=context,
+                )
+
+                self.assertIsInstance(subject, str)
+                self.assertIsInstance(body, str)
+                self.assertIn(context["order_id"], subject + body)
+
+    
