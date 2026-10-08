@@ -68,7 +68,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         notifications = Notification.objects.filter(order=order)
 
-        self.assertEqual(notifications.count(), 2)
+        self.assertEqual(notifications.count(), 3)
 
         channels = set(notifications.values_list("channel", flat=True))
 
@@ -77,6 +77,7 @@ class OrderNotificationIntegrationTests(TestCase):
             {
                 ChannelType.EMAIL,
                 ChannelType.SMS,
+                ChannelType.IN_APP,
             },
         )
 
@@ -116,10 +117,10 @@ class OrderNotificationIntegrationTests(TestCase):
                 str(order.total_amount),
             )
 
-        self.assertEqual(len(callbacks), 2)
+        self.assertEqual(len(callbacks), 3)
         self.assertEqual(
             mock_process_notification.call_count,
-            2,
+            3,
         )
 
         notification_ids = {str(notification.id) for notification in notifications}
@@ -160,11 +161,11 @@ class OrderNotificationIntegrationTests(TestCase):
 
         notifications = Notification.objects.filter(order=first_result.order)
 
-        self.assertEqual(notifications.count(), 2)
+        self.assertEqual(notifications.count(), 3)
 
         self.assertEqual(
             mock_process_notification.call_count,
-            2,
+            3,
         )
 
     @patch("apps.notifications.tasks.process_notification.delay")
@@ -212,7 +213,7 @@ class OrderNotificationIntegrationTests(TestCase):
             Notification.objects.filter(order=result.order).order_by("channel")
         )
 
-        self.assertEqual(len(notifications), 2)
+        self.assertEqual(len(notifications), 3)
 
         email_notification = next(
             notification
@@ -315,7 +316,7 @@ class OrderNotificationIntegrationTests(TestCase):
             event_type=NotificationEventType.ORDER_CANCELLED,
         )
 
-        self.assertEqual(notifications.count(), 2)
+        self.assertEqual(notifications.count(), 3)
 
         channels = set(notifications.values_list("channel", flat=True))
 
@@ -324,6 +325,7 @@ class OrderNotificationIntegrationTests(TestCase):
             {
                 ChannelType.EMAIL,
                 ChannelType.SMS,
+                ChannelType.IN_APP,
             },
         )
 
@@ -360,7 +362,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             mock_process_notification.call_count,
-            2,
+            3,
         )
 
         notification_ids = {str(notification.id) for notification in notifications}
@@ -521,7 +523,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             notifications.count(),
-            2,
+            3,
         )
 
         self.assertSetEqual(
@@ -529,6 +531,7 @@ class OrderNotificationIntegrationTests(TestCase):
             {
                 ChannelType.EMAIL,
                 ChannelType.SMS,
+                ChannelType.IN_APP,
             },
         )
 
@@ -565,12 +568,12 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             len(callbacks),
-            2,
+            3,
         )
 
         self.assertEqual(
             mock_process_notification.call_count,
-            2,
+            3,
         )
 
         dispatched_ids = {
@@ -718,7 +721,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             shipping_notification_count,
-            2,
+            3,
         )
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -733,7 +736,7 @@ class OrderNotificationIntegrationTests(TestCase):
                 order=order,
                 event_type=NotificationEventType.ORDER_SHIPPED,
             ).count(),
-            2,
+            3,
         )
 
         mock_process_notification.assert_not_called()
@@ -786,7 +789,7 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             notifications.count(),
-            2,
+            3,
         )
 
         self.assertSetEqual(
@@ -794,6 +797,7 @@ class OrderNotificationIntegrationTests(TestCase):
             {
                 ChannelType.EMAIL,
                 ChannelType.SMS,
+                ChannelType.IN_APP,
             },
         )
 
@@ -830,12 +834,12 @@ class OrderNotificationIntegrationTests(TestCase):
 
         self.assertEqual(
             len(callbacks),
-            2,
+            3,
         )
 
         self.assertEqual(
             mock_process_notification.call_count,
-            2,
+            3,
         )
 
         dispatched_ids = {
@@ -967,8 +971,8 @@ class OrderNotificationIntegrationTests(TestCase):
             event_type=NotificationEventType.ORDER_DELIVERED,
         )
 
-        self.assertEqual(delivered_notifications.count(), 2)
-        self.assertEqual(mock_process_notification.call_count, 2)
+        self.assertEqual(delivered_notifications.count(), 3)
+        self.assertEqual(mock_process_notification.call_count, 3)
 
         mock_process_notification.reset_mock()
 
@@ -991,7 +995,7 @@ class OrderNotificationIntegrationTests(TestCase):
                 order=order,
                 event_type=NotificationEventType.ORDER_DELIVERED,
             ).count(),
-            2,
+            3,
         )
         self.assertEqual(len(callbacks), 0)
         mock_process_notification.assert_not_called()
