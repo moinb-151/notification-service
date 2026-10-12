@@ -84,6 +84,7 @@ class NotificationTemplate(models.Model):
     channel = models.CharField(max_length=20, choices=ChannelType.choices)
     subject = models.CharField(max_length=255, blank=True)
     body_template = models.TextField()
+    html_body_template = models.TextField(blank=True, default="")
     version = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
