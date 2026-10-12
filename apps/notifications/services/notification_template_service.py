@@ -21,7 +21,16 @@ class NotificationTemplateService:
     @staticmethod
     def render_template(
         template: NotificationTemplate, context: dict
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str | None]:
         subject = NotificationTemplateService.render(template.subject, context)
+        
         body = NotificationTemplateService.render(template.body_template, context)
-        return subject, body
+
+        html_body = None
+        if template.html_body_template:
+            html_body = NotificationTemplateService.render(
+                template.html_body_template,
+                context,
+            )
+
+        return subject, body, html_body
