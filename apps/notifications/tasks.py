@@ -77,10 +77,17 @@ def process_notification(self, notification_id):
         )
         return
 
+    context = {
+        **notification.payload,
+        "name": notification.user.first_name.strip()
+        if notification.user.first_name
+        else "there",
+    }
+
     # Render
-    subject, body = NotificationTemplateService.render_template(
+    subject, body, html_body = NotificationTemplateService.render_template(
         template=notification_template,
-        context=notification.payload,
+        context=context,
     )
 
     NotificationService.record_attempt(
@@ -94,6 +101,7 @@ def process_notification(self, notification_id):
                     to=notification.user.email,
                     subject=subject,
                     body=body,
+                    html_body=html_body,
                 )
             case ChannelType.SMS:
                 message_id = SMSProvider.send(
