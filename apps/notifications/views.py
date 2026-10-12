@@ -182,7 +182,7 @@ def notification_stream(request):
                     if template is None:
                         continue
 
-                    subject, body = NotificationTemplateService.render_template(
+                    subject, body, _ = NotificationTemplateService.render_template(
                         template=template, context=missed_notification.payload
                     )
 
