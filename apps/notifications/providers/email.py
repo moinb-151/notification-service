@@ -16,7 +16,9 @@ class EmailProvider:
     )
 
     @classmethod
-    def send(cls, to: str, subject: str, body: str) -> str:
+    def send(
+        cls, to: str, subject: str, body: str, html_body: str | None = None
+    ) -> str:
         try:
             response = cls._client.send_email(
                 Source=settings.SES_FROM_EMAIL,
@@ -29,10 +31,20 @@ class EmailProvider:
                         "Charset": "UTF-8",
                     },
                     "Body": {
-                        "Html": {
+                        "Text": {
                             "Data": body,
                             "Charset": "UTF-8",
                         },
+                        **(
+                            {
+                                "Html": {
+                                    "Data": html_body,
+                                    "Charset": "UTF-8",
+                                }
+                            }
+                            if html_body is not None
+                            else {}
+                        ),
                     },
                 },
             )
