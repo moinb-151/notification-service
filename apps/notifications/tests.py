@@ -24,6 +24,7 @@ from ..users.models import NotificationPreference
 from .services.notification_service import NotificationService
 from .services.notification_template_service import NotificationTemplateService
 from .providers.in_app import InAppProvider
+from .providers.email import EmailProvider
 from .transport.redis import RedisTransport
 from ..users.models import User
 
@@ -268,19 +269,63 @@ class RedisTransportTests(TestCase):
         pubsub.close()
 
 
+class EmailProviderTests(TestCase):
+    @patch("apps.notifications.providers.email.EmailProvider._client")
+    def test_send_plain_text_email(self, mock_client):
+        mock_client.send_email.return_value = {"MessageId": "test-message-id"}
+
+        message_id = EmailProvider.send(
+            to="customer@example.com",
+            subject="Test subject",
+            body="Plain-text body",
+        )
+
+        self.assertEqual(message_id, "test-message-id")
+
+        request = mock_client.send_email.call_args.kwargs
+        body = request["Message"]["Body"]
+
+        self.assertEqual(
+            body["Text"]["Data"],
+            "Plain-text body",
+        )
+        self.assertNotIn("Html", body)
+
+    @patch("apps.notifications.providers.email.EmailProvider._client")
+    def test_send_html_and_plain_text_email(self, mock_client):
+        mock_client.send_email.return_value = {"MessageId": "test-html-message-id"}
+
+        message_id = EmailProvider.send(
+            to="customer@example.com",
+            subject="Order confirmed",
+            body="Your order has been confirmed.",
+            html_body="<h1>Order confirmed</h1>",
+        )
+
+        self.assertEqual(message_id, "test-html-message-id")
+
+        request = mock_client.send_email.call_args.kwargs
+        body = request["Message"]["Body"]
+
+        self.assertEqual(
+            body["Text"]["Data"],
+            "Your order has been confirmed.",
+        )
+        self.assertEqual(
+            body["Html"]["Data"],
+            "<h1>Order confirmed</h1>",
+        )
+
+
 class InAppProviderTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
             email="test@example.com",
             password="testpassword",
+            first_name="John",
+            last_name="Doe",
         )
-
-        # self.preference = NotificationPreference.objects.create(
-        #     user=self.user,
-        #     channel=ChannelType.IN_APP,
-        #     enabled=True,
-        # )
 
     @patch.object(RedisTransport, "publish")
     def test_in_app_provider_send(self, mock_publish):
@@ -363,7 +408,7 @@ class InAppProviderTests(TestCase):
             notification,
             title="This is Test Notification",
             body=(
-                "Hello John Doe,\n\n"
+                "Hello John,\n\n"
                 "This is a test notification from notification service.\n\n"
                 "Your notification system is working correctly.\n\n"
                 "Regards,\n"
@@ -381,6 +426,51 @@ class InAppProviderTests(TestCase):
         self.assertEqual(
             notification.provider_message_id,
             str(notification.id),
+        )
+
+    @patch(
+        "apps.notifications.tasks.InAppProvider.send",
+        return_value="test-in-app-message-id",
+    )
+    def test_process_notification_in_app_channel_without_first_name(self, mock_send):
+        self.user.first_name = ""
+        self.user.save(update_fields=["first_name"])
+
+        from apps.notifications.tasks import process_notification
+
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            idempotency_key="test-in-app-no-first-name",
+            payload={},
+        )
+
+        NotificationTemplate.objects.create(
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            channel=ChannelType.IN_APP,
+            subject="This is Test Notification",
+            body_template=(
+                "Hello {{ name }},\n\n"
+                "This is a test notification from notification service.\n\n"
+                "Your notification system is working correctly.\n\n"
+                "Regards,\n"
+                "Notification Service"
+            ),
+        )
+
+        process_notification.run(str(notification.id))
+
+        mock_send.assert_called_once_with(
+            notification,
+            title="This is Test Notification",
+            body=(
+                "Hello there,\n\n"
+                "This is a test notification from notification service.\n\n"
+                "Your notification system is working correctly.\n\n"
+                "Regards,\n"
+                "Notification Service"
+            ),
         )
 
 
@@ -412,7 +502,9 @@ class NotificationServiceTests(TestCase):
 
         cursor = str(notifications[1].id)
 
-        result = NotificationService.get_notifications_after(self.user, cursor, ChannelType.EMAIL)
+        result = NotificationService.get_notifications_after(
+            self.user, cursor, ChannelType.EMAIL
+        )
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, notifications[2].id)
@@ -436,7 +528,9 @@ class NotificationServiceTests(TestCase):
     def test_unknown_notification_id_returns_empty(self):
         unknown_id = str(uuid.uuid4())
 
-        result = NotificationService.get_notifications_after(self.user, unknown_id, ChannelType.EMAIL)
+        result = NotificationService.get_notifications_after(
+            self.user, unknown_id, ChannelType.EMAIL
+        )
 
         self.assertEqual(len(result), 0)
 
@@ -455,9 +549,7 @@ class NotificationServiceTests(TestCase):
             )
 
         result = NotificationService.get_notifications_after(
-            self.user, 
-            str(notifications[0].id),
-            ChannelType.EMAIL
+            self.user, str(notifications[0].id), ChannelType.EMAIL
         )
 
         self.assertEqual(len(result), 4)
@@ -488,13 +580,12 @@ class NotificationServiceTests(TestCase):
         ).update(created_at=created_at)
 
         result = NotificationService.get_notifications_after(
-            self.user,
-            str(notifications[0].id),
-            ChannelType.EMAIL
+            self.user, str(notifications[0].id), ChannelType.EMAIL
         )
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, notifications[1].id)
+
 
 class NotificationStreamTests(TestCase):
     def setUp(self):
@@ -573,7 +664,9 @@ class NotificationStreamTests(TestCase):
 
     @patch("apps.notifications.views.NotificationService.get_notifications_after")
     @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_recovery_deduplicates_live_notification(self, mock_pubsub_method, mock_get_notifications_after):
+    def test_recovery_deduplicates_live_notification(
+        self, mock_pubsub_method, mock_get_notifications_after
+    ):
         notifications = []
 
         for i in range(2):
@@ -711,7 +804,9 @@ class NotificationStreamTests(TestCase):
 
     @patch("apps.notifications.views.NotificationService.get_notifications_after")
     @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_stream_with_no_last_event_id(self, mock_pubsub_method, mock_get_notifications_after):
+    def test_stream_with_no_last_event_id(
+        self, mock_pubsub_method, mock_get_notifications_after
+    ):
         mock_pubsub = mock_pubsub_method.return_value
         mock_pubsub.get_message.side_effect = RuntimeError("Stop SSE test")
 
@@ -747,6 +842,7 @@ class NotificationStreamTests(TestCase):
             response.json(),
             {"detail": "Authentication credentials were not provided."},
         )
+
 
 class NotificationTemplateServiceTests(TestCase):
 
@@ -826,7 +922,7 @@ class NotificationTemplateServiceTests(TestCase):
 
                 self.assertIsNotNone(template)
 
-                subject, body = NotificationTemplateService.render_template(
+                subject, body, _ = NotificationTemplateService.render_template(
                     template=template,
                     context=context,
                 )
@@ -835,4 +931,81 @@ class NotificationTemplateServiceTests(TestCase):
                 self.assertIsInstance(body, str)
                 self.assertIn(context["order_id"], subject + body)
 
+    def test_order_email_html_templates_render_successfully(self):
+        context = {
+            "name": "Moin",
+            "order_id": "test-order-123",
+            "order_status": "PENDING",
+            "total_amount": "1500.00",
+            "metadata": {
+                "shipping_address": {
+                    "name": "Moin Bagban",
+                    "line1": "123 MG Road",
+                    "line2": "Near City Mall",
+                    "city": "Pune",
+                    "state": "Maharashtra",
+                    "country": "India",
+                    "postal_code": "411001",
+                },
+                "notes": "Please deliver between 10 AM and 1 PM.",
+                "gift": False,
+            },
+        }
+
+        event_types = [
+            NotificationEventType.ORDER_CREATED,
+            NotificationEventType.ORDER_CANCELLED,
+            NotificationEventType.ORDER_SHIPPED,
+            NotificationEventType.ORDER_DELIVERED,
+        ]
+
+        for event_type in event_types:
+            with self.subTest(event_type=event_type):
+                template = NotificationTemplateService.get_template(
+                    event_type=event_type,
+                    channel=ChannelType.EMAIL,
+                )
+
+                self.assertIsNotNone(template)
+                self.assertTrue(template.html_body_template)
+
+                subject, body, html_body = (
+                    NotificationTemplateService.render_template(
+                        template=template,
+                        context=context,
+                    )
+                )
+
+                self.assertIsInstance(subject, str)
+                self.assertIsInstance(body, str)
+                self.assertIsInstance(html_body, str)
+
+                self.assertIn("Moin", html_body)
+                self.assertIn("test-order-123", html_body)
+                self.assertIn("1500.00", html_body)
+
+                if event_type in (
+                    NotificationEventType.ORDER_CREATED,
+                    NotificationEventType.ORDER_SHIPPED,
+                ):
+                    self.assertIn("Pune", html_body)
     
+    def test_template_without_html_returns_none_for_html_body(self):
+        template = NotificationTemplate.objects.create(
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            channel=ChannelType.IN_APP,
+            subject="Test notification",
+            body_template="Hello {{ name }}",
+            html_body_template="",
+        )
+
+        subject, body, html_body = (
+            NotificationTemplateService.render_template(
+                template=template,
+                context={"name": "Moin"},
+            )
+        )
+
+        self.assertEqual(subject, "Test notification")
+        self.assertEqual(body, "Hello Moin")
+        self.assertIsNone(html_body)
