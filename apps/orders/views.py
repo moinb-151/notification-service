@@ -17,7 +17,7 @@ from .services.product_service import ProductService
 class ProductListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ProductSerializer
-    queryset = Product.objects.filter(is_active=True)
+    queryset = Product.objects.filter(is_active=True).order_by("id")
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
