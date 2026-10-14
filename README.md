@@ -221,6 +221,86 @@ The management UI is available locally at:
 http://localhost:15672
 ```
 
+### Dead-Letter Queue and Parking Queue
+
+The RabbitMQ dead-letter queue and parking queue are intended for messages that cannot be processed normally. Create them in the `notification_vhost` virtual host using the RabbitMQ Management UI.
+
+Open `http://localhost:15672`, sign in, and select **Virtual Hosts → `notification_vhost`** (or select that virtual host from the UI's virtual-host selector before creating resources).
+
+#### 1. Create the dead-letter exchange
+
+Under **Exchanges → Add a new exchange**, create:
+
+| Setting | Value |
+|---|---|
+| Name | `notifications.dlx` |
+| Type | `direct` |
+| Durable | Enabled |
+| Auto-delete | Disabled |
+| Internal | Disabled |
+
+Click **Add exchange**.
+
+#### 2. Create the dead-letter queue
+
+Under **Queues and Streams → Add a new queue**, create:
+
+| Setting | Value |
+|---|---|
+| Type | Classic queue |
+| Name | `notification.dlq` |
+| Durable | Enabled |
+| Auto-delete | Disabled |
+
+Click **Add queue**.
+
+Open `notification.dlq`, find **Bindings**, and add a binding from `notifications.dlx` with routing key `notification.dlq`.
+
+#### 3. Create the parking queue
+
+Create another durable classic queue:
+
+| Setting | Value |
+|---|---|
+| Name | `notification.parking` |
+| Durable | Enabled |
+| Auto-delete | Disabled |
+
+Open `notification.parking`, then add a binding from `notifications.dlx` with routing key `notification.parking`.
+
+The parking queue is a holding area for messages that have been inspected and deliberately moved aside for later investigation or manual handling. It is not automatically populated just because the DLQ exists.
+
+#### 4. Route messages from application queues to the DLQ
+
+For each source/work queue that should dead-letter failed messages, configure these queue arguments when the queue is declared:
+
+| Argument | Value |
+|---|---|
+| `x-dead-letter-exchange` | `notifications.dlx` |
+| `x-dead-letter-routing-key` | `notification.dlq` |
+
+The source queue must be declared with these arguments for RabbitMQ to route dead-lettered messages to `notification.dlq`. Creating the exchange and destination queues alone does not enable dead-lettering.
+
+If Celery or application configuration declares the source queues, configure the arguments in that declaration and recreate/redeclare the queue as appropriate. RabbitMQ does not allow a queue to be redeclared with different arguments while the existing queue remains; back up any messages and plan queue recreation carefully.
+
+#### 5. Move a message to the parking queue
+
+After investigating a message in `notification.dlq`, an operator can deliberately republish it through `notifications.dlx` using routing key `notification.parking`, then acknowledge/remove the original DLQ message. Do not remove the original before confirming the republished message is present in the parking queue.
+
+Use the Management UI's **Get messages** action only for controlled troubleshooting. Fetching with acknowledgement can remove a message; choose the acknowledgement mode carefully.
+
+#### 6. Verify the topology
+
+In the `notification_vhost`, verify:
+
+- Exchange `notifications.dlx` exists and is durable.
+- Queue `notification.dlq` is durable and bound with routing key `notification.dlq`.
+- Queue `notification.parking` is durable and bound with routing key `notification.parking`.
+- Each source queue that should dead-letter has the `x-dead-letter-exchange` and `x-dead-letter-routing-key` arguments.
+- A test message dead-lettered from a configured source queue appears in `notification.dlq`.
+
+**Important:** The DLQ and parking queue are holding queues, not ordinary Celery worker queues. Do not attach the normal notification workers to them. A dead-letter queue also does not automatically mean Celery's task retry or failure handling will send every failed task there; confirm the task acknowledgement/retry behavior and queue declarations used by this project.
+
 ## Health Check
 
 The application exposes:
@@ -340,8 +420,8 @@ Planned infrastructure and functionality include:
 - Celery Beat container
 - Priority notification queues
 - RabbitMQ topic exchanges and bindings
-- Dead-letter queues
-- Retry and failure handling
+- Automated RabbitMQ topology declarations for dead-letter and parking queues
+- End-to-end verification of retry, dead-letter, and failure handling
 - Nginx reverse proxy
 - WebSocket/SSE-based in-app notifications
 - Production deployment configuration
