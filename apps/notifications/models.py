@@ -22,6 +22,7 @@ class NotificationStatus(models.TextChoices):
 
 class NotificationEventType(models.TextChoices):
     ORDER_CREATED = "ORDER_CREATED", "Order Created"
+    ORDER_CONFIRMED = "ORDER_CONFIRMED", "Order Confirmed"
     ORDER_CANCELLED = "ORDER_CANCELLED", "Order Cancelled"
     ORDER_SHIPPED = "ORDER_SHIPPED", "Order Shipped"
     ORDER_DELIVERED = "ORDER_DELIVERED", "Order Delivered"

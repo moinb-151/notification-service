@@ -197,6 +197,28 @@ class OrderService:
                 NotificationService.dispatch_notification_on_commit(result.notification)
 
     @staticmethod
+    def confirm_order_notifications(order):
+        from common.choices import ChannelType
+        from apps.notifications.services.notification_service import (
+            NotificationService,
+        )
+
+        for channel in (
+            ChannelType.EMAIL,
+            ChannelType.SMS,
+            ChannelType.IN_APP,
+        ):
+            result = NotificationService.create_order_confirmed_notification(
+                order=order,
+                channel=channel,
+            )
+
+            if result.created:
+                NotificationService.dispatch_notification_on_commit(
+                    result.notification
+                )
+
+    @staticmethod
     def ship_order_notifications(order):
         from common.choices import ChannelType
         from apps.notifications.services.notification_service import (
@@ -286,6 +308,12 @@ class OrderService:
                 setattr(order, field, value)
 
             order.save(update_fields=[key for key in validated_data.keys()])
+
+            if (
+                old_status == OrderStatus.PENDING
+                and new_status == OrderStatus.CONFIRMED
+            ):
+                OrderService.confirm_order_notifications(order)
 
             if (
                 old_status == OrderStatus.CONFIRMED
