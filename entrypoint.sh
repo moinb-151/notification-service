@@ -8,8 +8,8 @@ case "$1" in
         python manage.py migrate --noinput
 
         echo "Starting Uvicorn..."
-        exec uvicorn config.asgi:application \\
-            --host 0.0.0.0 \\
+        exec uvicorn config.asgi:application \
+            --host 0.0.0.0 \
             --port 8000
         ;;
 
