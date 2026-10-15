@@ -9,6 +9,7 @@ services:
       - "8000:8000"
     volumes:
       - ./keys:/app/keys:ro
+    entrypoint: ["/app/entrypoint.sh", "web"]
     depends_on:
       postgres:
         condition: service_healthy
