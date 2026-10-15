@@ -8,9 +8,14 @@ case "$1" in
         python manage.py migrate --noinput
 
         echo "Starting Uvicorn..."
-        exec uvicorn config.asgi:application \
-            --host 0.0.0.0 \
+        exec uvicorn config.asgi:application \\
+            --host 0.0.0.0 \\
             --port 8000
+        ;;
+
+    rabbitmq-init)
+        echo "Initializing RabbitMQ notification topology..."
+        exec python manage.py setup_rabbitmq_topology
         ;;
 
     worker)
@@ -21,6 +26,11 @@ case "$1" in
     beat)
         echo "Starting Celery Beat..."
         exec celery -A config beat --loglevel=info
+        ;;
+
+    dlq)
+        echo "Starting notification DLQ consumer..."
+        exec python manage.py consume_dlq
         ;;
 
     *)

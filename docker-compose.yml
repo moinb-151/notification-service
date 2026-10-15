@@ -45,13 +45,28 @@ services:
       RABBITMQ_DEFAULT_PASS: notification_password
       RABBITMQ_DEFAULT_VHOST: notification_vhost
     ports:
+      - "5672:5672"
       - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  rabbitmq-init:
+    image: notification-service-web
+    container_name: notification-rabbitmq-init
+    env_file:
+      - .env.docker
+    volumes:
+      - ./keys:/app/keys:ro
+    entrypoint: ["/app/entrypoint.sh", "rabbitmq-init"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: "no"
   celery-worker:
     image: notification-service-web
     container_name: notification-celery-worker
@@ -67,6 +82,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
 
   celery-beat:
     image: notification-service-web
@@ -83,6 +100,25 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
+
+  dlq-consumer:
+    image: notification-service-web
+    container_name: notification-dlq-consumer
+    env_file:
+      - .env.docker
+    volumes:
+      - ./keys:/app/keys:ro
+    entrypoint: ["/app/entrypoint.sh", "dlq"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      rabbitmq-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
+  rabbitmq_data:
