@@ -28,6 +28,9 @@ from .providers.email import EmailProvider
 from .transport.redis import RedisTransport
 from ..users.models import User
 
+from .exceptions import TransientNotificationProviderError
+from redis.exceptions import ConnectionError, TimeoutError
+
 
 class NotificationReplayTests(TestCase):
 
@@ -472,6 +475,97 @@ class InAppProviderTests(TestCase):
                 "Notification Service"
             ),
         )
+
+    @patch.object(RedisTransport, "publish")
+    def test_in_app_provider_returns_notification_id(self, mock_publish):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="api-replay-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        mock_publish.return_value = None
+
+        result = InAppProvider.send(
+            notification,
+            title="Test notification",
+            body="This is a test notification.",
+        )
+
+        self.assertEqual(result, str(notification.id))
+
+    #Use redis.exceptions.ConnectionError
+    @patch.object(
+        RedisTransport, "publish", side_effect=ConnectionError("Redis connection error")
+    )
+    def test_in_app_provider_raises_transient_error_on_connection_error(
+        self, mock_publish
+    ):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="api-replay-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        with self.assertRaises(TransientNotificationProviderError) as context:
+            InAppProvider.send(
+                notification,
+                title="Test notification",
+                body="This is a test notification.",
+            )
+
+        self.assertIn("Failed to send in-app notification", str(context.exception))
+
+    @patch.object(
+        RedisTransport, "publish", side_effect=TimeoutError("Redis timeout error")
+    )
+    def test_in_app_provider_raises_transient_error_on_timeout(
+        self, mock_publish
+    ):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="api-replay-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        with self.assertRaises(TransientNotificationProviderError) as context:
+            InAppProvider.send(
+                notification,
+                title="Test notification",
+                body="This is a test notification.",
+            )
+
+        self.assertIn("Failed to send in-app notification", str(context.exception))
+
+    @patch.object(RedisTransport, "publish", return_value=0)
+    def test_in_app_provider_returns_notification_id_on_publish_result_zero(
+        self, mock_publish
+    ):
+        notification = Notification.objects.create(
+            user=self.user,
+            channel=ChannelType.IN_APP,
+            event_type=NotificationEventType.TEST_NOTIFICATION,
+            status=NotificationStatus.PENDING,
+            idempotency_key="api-replay-test-key",
+            payload={"name": "John Doe"},
+        )
+
+        result = InAppProvider.send(
+            notification,
+            title="Test notification",
+            body="This is a test notification.",
+        )
+
+        self.assertEqual(result, str(notification.id))
 
 
 class NotificationServiceTests(TestCase):
@@ -969,11 +1063,9 @@ class NotificationTemplateServiceTests(TestCase):
                 self.assertIsNotNone(template)
                 self.assertTrue(template.html_body_template)
 
-                subject, body, html_body = (
-                    NotificationTemplateService.render_template(
-                        template=template,
-                        context=context,
-                    )
+                subject, body, html_body = NotificationTemplateService.render_template(
+                    template=template,
+                    context=context,
                 )
 
                 self.assertIsInstance(subject, str)
@@ -989,7 +1081,7 @@ class NotificationTemplateServiceTests(TestCase):
                     NotificationEventType.ORDER_SHIPPED,
                 ):
                     self.assertIn("Pune", html_body)
-    
+
     def test_template_without_html_returns_none_for_html_body(self):
         template = NotificationTemplate.objects.create(
             event_type=NotificationEventType.TEST_NOTIFICATION,
@@ -999,11 +1091,9 @@ class NotificationTemplateServiceTests(TestCase):
             html_body_template="",
         )
 
-        subject, body, html_body = (
-            NotificationTemplateService.render_template(
-                template=template,
-                context={"name": "Moin"},
-            )
+        subject, body, html_body = NotificationTemplateService.render_template(
+            template=template,
+            context={"name": "Moin"},
         )
 
         self.assertEqual(subject, "Test notification")
