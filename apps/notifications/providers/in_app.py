@@ -1,6 +1,7 @@
 import json
 from ..transport.redis import RedisTransport
 from ..models import Notification
+from ..exceptions import TransientNotificationProviderError
 
 
 class InAppProvider:
@@ -19,9 +20,12 @@ class InAppProvider:
             }
         )
 
-        RedisTransport.publish(
-            channel=channel,
-            message=message,
-        )
+        try:
+            RedisTransport.publish(
+                channel=channel,
+                message=message,
+            )
+        except Exception as exc:
+            raise TransientNotificationProviderError("Failed to send in-app notification") from exc
 
         return str(notification.id)
