@@ -6,6 +6,7 @@ from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 from django.http import JsonResponse
+from django.core.exceptions import ValidationError
 
 from rest_framework import response, status
 from rest_framework.test import APIClient
@@ -497,7 +498,6 @@ class InAppProviderTests(TestCase):
 
         self.assertEqual(result, str(notification.id))
 
-    #Use redis.exceptions.ConnectionError
     @patch.object(
         RedisTransport, "publish", side_effect=ConnectionError("Redis connection error")
     )
@@ -679,6 +679,14 @@ class NotificationServiceTests(TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].id, notifications[1].id)
+
+    def test_malformed_notification_id_raises_validation_error(self):
+        with self.assertRaises(ValidationError):
+                NotificationService.get_notifications_after(
+                    self.user,
+                    "not-a-valid-uuid",
+                    ChannelType.IN_APP,
+                )
 
 
 class NotificationStreamTests(TestCase):
