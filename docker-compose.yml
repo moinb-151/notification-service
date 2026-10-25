@@ -4,7 +4,7 @@ services:
       context: .
     container_name: notification-web
     env_file:
-      - .env.docker
+      - .env
     ports:
       - "8000:8000"
     volumes:
@@ -60,7 +60,7 @@ services:
     image: notification-service-web
     container_name: notification-rabbitmq-init
     env_file:
-      - .env.docker
+      - .env
     volumes:
       - ./keys:/app/keys:ro
     entrypoint: ["/app/entrypoint.sh", "rabbitmq-init"]
@@ -72,7 +72,7 @@ services:
     image: notification-service-web
     container_name: notification-celery-worker
     env_file:
-      - .env.docker
+      - .env
     volumes:
       - ./keys:/app/keys:ro
     entrypoint: ["/app/entrypoint.sh", "worker"]
@@ -90,7 +90,7 @@ services:
     image: notification-service-web
     container_name: notification-celery-beat
     env_file:
-      - .env.docker
+      - .env
     volumes:
       - ./keys:/app/keys:ro
     entrypoint: ["/app/entrypoint.sh", "beat"]
@@ -108,7 +108,7 @@ services:
     image: notification-service-web
     container_name: notification-dlq-consumer
     env_file:
-      - .env.docker
+      - .env
     volumes:
       - ./keys:/app/keys:ro
     entrypoint: ["/app/entrypoint.sh", "dlq"]
