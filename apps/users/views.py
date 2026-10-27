@@ -19,6 +19,12 @@ class UserRegistrationView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        if not settings.ENABLE_SIGNUPS:
+            return Response(
+                {"detail": "Signups are currently disabled"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()

@@ -50,6 +50,7 @@ CSRF_COOKIE_DOMAIN = ".moinfinite.cc"
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SECURE = True
 
+ENABLE_SIGNUPS = config("ENABLE_SIGNUPS", cast=bool, default=False)
 
 # Application definition
 
