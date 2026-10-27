@@ -39,6 +39,17 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", cast=Csv(), default="")
 
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv(), default="")
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+SECURE_SSL_REDIRECT = True
+
+SESSION_COOKIE_SECURE = True
+
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_DOMAIN = ".moinfinite.cc"
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
