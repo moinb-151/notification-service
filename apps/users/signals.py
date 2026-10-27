@@ -10,9 +10,14 @@ from .models import NotificationPreference, User
 def seed_notification_preference(sender, instance, created, **kwargs):
     if not created:
         return
+
     NotificationPreference.objects.bulk_create(
         [
-            NotificationPreference(user=instance, channel=value)
+            NotificationPreference(
+                user=instance,
+                channel=value,
+                enabled=(value != ChannelType.SMS),
+            )
             for value, _ in ChannelType.choices
         ]
     )
