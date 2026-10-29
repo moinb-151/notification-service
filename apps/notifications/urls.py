@@ -6,7 +6,7 @@ from .views import (
     NotificationPreferenceView,
     NotificationView,
     NotificationReplayView,
-    notification_stream,
+    NotificationStreamView,
 )
 
 urlpatterns = [
@@ -33,7 +33,7 @@ urlpatterns = [
     ),
     path(
         "stream/",
-        notification_stream,
+        NotificationStreamView.as_view(),
         name="notification-stream",
     ),
 ]

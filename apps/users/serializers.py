@@ -28,6 +28,13 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return User.objects.create_user(**validated_data)
 
 
+class PublicUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["email"]
+        read_only_fields = fields
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
@@ -35,6 +42,12 @@ class LoginSerializer(TokenObtainPairSerializer):
         message = "Login successfull"
         data.update({"message": message, "user": user_data})
         return data
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
+    user = PublicUserSerializer(read_only=True)
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:

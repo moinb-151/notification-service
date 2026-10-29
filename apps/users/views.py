@@ -1,4 +1,6 @@
 from django.conf import settings
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,15 +11,30 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User
 from .serializers import (
     LoginSerializer,
+    LoginResponseSerializer,
+    PublicUserSerializer,
     UserRegistrationSerializer,
     UserProfileSerializer,
 )
 from .utils import _set_auth_cookie
+from common.serializers import ErrorDetailSerializer, MessageResponseSerializer
 
 
 class UserRegistrationView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        operation_id="user_registration_create",
+        request=UserRegistrationSerializer,
+        responses={
+            201: PublicUserSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            401: ErrorDetailSerializer,
+        },
+    )
     def post(self, request):
         if not settings.ENABLE_SIGNUPS:
             return Response(
@@ -36,6 +53,23 @@ class LoginView(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
     serializer_class = LoginSerializer
 
+    @extend_schema(
+        operation_id="user_login_create",
+        request=LoginSerializer,
+        responses={
+            200: LoginResponseSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            401: ErrorDetailSerializer,
+        },
+        description=(
+            "Authenticates a user using their email and password. "
+            "On successful authentication, sets the access and refresh "
+            "tokens in HTTP cookies and returns the user's information."
+        ),
+    )
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
@@ -71,11 +105,28 @@ class LoginView(TokenObtainPairView):
 class UserProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="user_profile_retrieve",
+        request=None,
+        responses={200: UserProfileSerializer, 401: ErrorDetailSerializer},
+    )
     def get(self, request):
         user = request.user
         serializer = UserProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        operation_id="user_profile_update",
+        request=UserProfileSerializer,
+        responses={
+            200: UserProfileSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            401: ErrorDetailSerializer,
+        },
+    )
     def patch(self, request):
         user = request.user
         serializer = UserProfileSerializer(user, data=request.data, partial=True)
@@ -88,6 +139,29 @@ class UserProfileView(APIView):
 class RefreshView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        operation_id="token_refresh",
+        auth=[{"BearerAuth": []}, {"CookieAuth": []}, {}],
+        request=None,
+        parameters=[
+            OpenApiParameter(
+                name="refresh_token",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.COOKIE,
+                required=True,
+                description=(
+                    "Refresh JWT cookie required to complete token refresh. "
+                    "This is separate from the optional access-token cookie "
+                    "used for request authentication."
+                ),
+            )
+        ],
+        responses={
+            200: MessageResponseSerializer,
+            401: ErrorDetailSerializer,
+            404: ErrorDetailSerializer,
+        },
+    )
     def post(self, request):
         refresh_token = request.COOKIES.get("refresh_token")
 
@@ -140,6 +214,28 @@ class RefreshView(APIView):
 class LogoutView(APIView):
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(
+        operation_id="user_logout",
+        auth=[{"BearerAuth": []}, {"CookieAuth": []}, {}],
+        request=None,
+        parameters=[
+            OpenApiParameter(
+                name="refresh_token",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.COOKIE,
+                required=False,
+                description=(
+                    "Optional refresh JWT cookie to blacklist. This is separate "
+                    "from the optional access-token cookie used for request "
+                    "authentication."
+                ),
+            )
+        ],
+        responses={
+            200: MessageResponseSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def post(self, request):
         refresh_token = request.COOKIES.get("refresh_token")
 
@@ -167,5 +263,10 @@ class LogoutView(APIView):
 class AuthView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="auth_test_retrieve",
+        request=None,
+        responses={200: MessageResponseSerializer, 401: ErrorDetailSerializer},
+    )
     def get(self, request):
         return Response({"message": "Welcome"})
