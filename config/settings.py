@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
     "apps.users",
     "apps.orders",
     "apps.notifications",
@@ -66,6 +67,21 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Notification Service API",
+    "DESCRIPTION": (
+        "REST API for user authentication, order management, "
+        "notification preferences, and notifications."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "OrderStatusEnum": "apps.orders.models.OrderStatus",
+        "NotificationStatusEnum": "apps.notifications.models.NotificationStatus",
+    },
 }
 
 MIDDLEWARE = [
