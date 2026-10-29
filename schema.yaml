@@ -963,6 +963,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorDetail'
           description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorDetail'
+          description: ''
   /users/test/:
     get:
       operationId: auth_test_retrieve

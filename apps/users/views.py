@@ -33,6 +33,7 @@ class UserRegistrationView(APIView):
                 description="Field-keyed validation errors.",
             ),
             401: ErrorDetailSerializer,
+            403: ErrorDetailSerializer,
         },
     )
     def post(self, request):
