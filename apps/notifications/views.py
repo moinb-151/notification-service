@@ -1,5 +1,14 @@
 import json
 from django.http import StreamingHttpResponse, JsonResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework import generics, permissions, status
@@ -10,6 +19,7 @@ from .serializers import (
     NotificationPreferenceBulkUpdateSerializer,
     NotificationPreferenceSerializer,
     NotificationPreferenceUpdateSerializer,
+    NotificationReplayResponseSerializer,
     NotificationSerializer,
 )
 from .services.notification_preference_service import NotificationPreferenceService
@@ -17,12 +27,52 @@ from .services.notification_service import NotificationService
 from .services.notification_template_service import NotificationTemplateService
 
 from common.choices import ChannelType
+from common.serializers import ErrorDetailSerializer
 
 from .transport.redis import RedisTransport
 
 from ..users.authentication import CustomJWTAuthentication
+from .models import NotificationEventType, NotificationStatus
 
 
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="notifications_list",
+        parameters=[
+            OpenApiParameter(
+                name="channel",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=[choice.value for choice in ChannelType],
+                required=False,
+            ),
+            OpenApiParameter(
+                name="is_read",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="status",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=[choice.value for choice in NotificationStatus],
+                required=False,
+            ),
+            OpenApiParameter(
+                name="event_type",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=[choice.value for choice in NotificationEventType],
+                required=False,
+            ),
+        ],
+        responses={
+            200: NotificationSerializer(many=True),
+            401: ErrorDetailSerializer,
+        },
+    )
+)
 class NotificationListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = NotificationSerializer
@@ -40,6 +90,15 @@ class NotificationListView(generics.ListAPIView):
 class NotificationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="notification_retrieve",
+        request=None,
+        responses={
+            200: NotificationSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def get(self, request, notification_id):
         notification = NotificationService.get_notification(
             notification_id=notification_id,
@@ -56,6 +115,15 @@ class NotificationView(APIView):
 
         return Response(notification_data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        operation_id="notification_mark_read",
+        request=None,
+        responses={
+            200: NotificationSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def patch(self, request, notification_id):
         notification = NotificationService.mark_as_read(
             notification_id=notification_id,
@@ -79,11 +147,31 @@ class NotificationView(APIView):
 class NotificationPreferenceListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="notification_preferences_list",
+        request=None,
+        responses={
+            200: NotificationPreferenceSerializer(many=True),
+            401: ErrorDetailSerializer,
+        },
+    )
     def get(self, request):
         preferences = NotificationPreferenceService.get_preferences(request.user)
         preferences_data = NotificationPreferenceSerializer(preferences, many=True).data
         return Response(preferences_data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        operation_id="notification_preferences_replace",
+        request=NotificationPreferenceBulkUpdateSerializer,
+        responses={
+            200: NotificationPreferenceSerializer(many=True),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            401: ErrorDetailSerializer,
+        },
+    )
     def put(self, request):
         serializer = NotificationPreferenceBulkUpdateSerializer(
             data=request.data,
@@ -110,6 +198,19 @@ class NotificationPreferenceListView(APIView):
 class NotificationPreferenceView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="notification_preference_update",
+        request=NotificationPreferenceUpdateSerializer(partial=True),
+        responses={
+            200: NotificationPreferenceSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def patch(self, request, channel):
         serializer = NotificationPreferenceUpdateSerializer(
             data=request.data,
@@ -239,12 +340,57 @@ def notification_stream(request):
     return response
 
 
+@method_decorator(csrf_protect, name="dispatch")
+class NotificationStreamView(APIView):
+    @extend_schema(
+        operation_id="notification_stream_connect",
+        auth=[{"BearerAuth": []}, {"CookieAuth": []}],
+        request=None,
+        parameters=[
+            OpenApiParameter(
+                name="Last-Event-ID",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=False,
+                description="Resume the event stream after this notification ID.",
+            )
+        ],
+        responses={
+            (200, "text/event-stream"): OpenApiResponse(
+                response=OpenApiTypes.STR,
+                description=(
+                    "Server-Sent Events stream. Each notification is sent as an "
+                    "`id`, `event: notification`, and JSON `data` field; heartbeat "
+                    "comments are sent while idle."
+                )
+            ),
+            (401, "application/json"): ErrorDetailSerializer,
+        },
+    )
+    def get(self, request):
+        return notification_stream(request)
+
+    def dispatch(self, request, *args, **kwargs):
+        return notification_stream(request, *args, **kwargs)
+
+
 # Admin
 
 
 class NotificationReplayView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
+    @extend_schema(
+        operation_id="notification_replay_create",
+        request=None,
+        responses={
+            202: NotificationReplayResponseSerializer,
+            400: ErrorDetailSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+            403: ErrorDetailSerializer,
+        },
+    )
     def post(self, request, notification_id):
         try:
             notification = NotificationService.replay_notification(

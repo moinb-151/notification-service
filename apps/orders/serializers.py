@@ -1,7 +1,15 @@
 from rest_framework import serializers
 
-from ..users.serializers import UserRegistrationSerializer
+from ..users.serializers import PublicUserSerializer
 from .models import Order, OrderItem, OrderStatus, Product
+
+
+class OrderQuantityField(serializers.IntegerField):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._spectacular_annotation = {
+            "field": {"type": "integer", "minimum": 1}
+        }
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -15,7 +23,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class OrderItemCreateSerializer(serializers.Serializer):
     product_id = serializers.UUIDField(required=True)
-    quantity = serializers.IntegerField(required=True)
+    quantity = OrderQuantityField(required=True)
 
     def validate_product_id(self, value):
         if value.version != 7:
@@ -43,7 +51,7 @@ class OrderCreateSerializer(serializers.Serializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    user = UserRegistrationSerializer()
+    user = PublicUserSerializer()
     items = OrderItemSerializer(many=True, read_only=True)
 
     class Meta:
@@ -59,6 +67,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "placed_at", "updated_at"]
+
+
+class OrderPaginationSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    next = serializers.URLField(allow_null=True)
+    previous = serializers.URLField(allow_null=True)
+    results = OrderSerializer(many=True)
 
 
 class OrderUpdateSerializer(serializers.Serializer):

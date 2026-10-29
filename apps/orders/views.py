@@ -3,9 +3,19 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.serializers import ErrorDetailSerializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
+
 from .models import Product
 from .serializers import (
     OrderCreateSerializer,
+    OrderPaginationSerializer,
     OrderSerializer,
     OrderUpdateSerializer,
     ProductSerializer,
@@ -14,6 +24,28 @@ from .services.order_service import OrderService
 from .services.product_service import ProductService
 
 
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="products_list",
+        request=None,
+        responses={
+            200: ProductSerializer(many=True),
+            401: ErrorDetailSerializer,
+        },
+    ),
+    post=extend_schema(
+        operation_id="product_create",
+        request=ProductSerializer,
+        responses={
+            201: ProductSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            401: ErrorDetailSerializer,
+        },
+    ),
+)
 class ProductListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ProductSerializer
@@ -31,6 +63,52 @@ class ProductListCreateView(generics.ListCreateAPIView):
         )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="product_retrieve",
+        request=None,
+        responses={
+            200: ProductSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    ),
+    put=extend_schema(
+        operation_id="product_replace",
+        request=ProductSerializer(partial=True),
+        responses={
+            200: ProductSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    ),
+    patch=extend_schema(
+        operation_id="product_update",
+        request=ProductSerializer(partial=True),
+        responses={
+            200: ProductSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    ),
+    delete=extend_schema(
+        operation_id="product_delete",
+        request=None,
+        responses={
+            204: None,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
+)
 class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = ProductSerializer
@@ -80,6 +158,31 @@ class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
 class OrderListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="orders_create",
+        request=OrderCreateSerializer,
+        parameters=[
+            OpenApiParameter(
+                name="Idempotency-Key",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description="Required key used to make order creation idempotent.",
+            )
+        ],
+        responses={
+            200: OrderSerializer,
+            201: OrderSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description=(
+                    "Field-keyed validation errors, or a detail message when the "
+                    "Idempotency-Key header is missing."
+                ),
+            ),
+            401: ErrorDetailSerializer,
+        },
+    )
     def post(self, request):
         idempotency_key = request.headers.get("Idempotency-Key")
 
@@ -104,6 +207,23 @@ class OrderListCreateView(APIView):
 
         return Response(order_data, status=return_status)
 
+    @extend_schema(
+        operation_id="orders_list",
+        request=None,
+        parameters=[
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Page number within the paginated order results.",
+            )
+        ],
+        responses={
+            200: OrderPaginationSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def get(self, request):
         orders = OrderService.get_orders(request.user)
         paginator = PageNumberPagination()
@@ -117,6 +237,14 @@ class OrderListCreateView(APIView):
 class OrderDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="order_retrieve",
+        responses={
+            200: OrderSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def get(self, request, order_id):
         order = OrderService.get_order(order_id, request.user)
 
@@ -129,6 +257,19 @@ class OrderDetailView(APIView):
 
         return Response(order_data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        operation_id="order_update",
+        request=OrderUpdateSerializer(partial=True),
+        responses={
+            200: OrderSerializer,
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Field-keyed validation errors.",
+            ),
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def patch(self, request, order_id):
         serializer = OrderUpdateSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -150,6 +291,15 @@ class OrderDetailView(APIView):
 class OrderCancelView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        operation_id="order_cancel",
+        request=None,
+        responses={
+            200: OrderSerializer,
+            404: ErrorDetailSerializer,
+            401: ErrorDetailSerializer,
+        },
+    )
     def patch(self, request, order_id):
         order = OrderService.cancel_order(order_id, request.user)
 

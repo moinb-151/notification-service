@@ -2,12 +2,12 @@ from rest_framework import serializers
 
 from ..orders.serializers import OrderSerializer
 from ..users.models import NotificationPreference
-from ..users.serializers import UserRegistrationSerializer
+from ..users.serializers import PublicUserSerializer
 from .models import Notification
 
 
 class NotificationSerializer(serializers.ModelSerializer):
-    user = UserRegistrationSerializer()
+    user = PublicUserSerializer()
     order = OrderSerializer()
 
     class Meta:
@@ -43,7 +43,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 
 
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
-    user = UserRegistrationSerializer(read_only=True)
+    user = PublicUserSerializer(read_only=True)
 
     class Meta:
         model = NotificationPreference
@@ -82,3 +82,8 @@ class NotificationPreferenceUpdateItemSerializer(serializers.ModelSerializer):
 
 class NotificationPreferenceBulkUpdateSerializer(serializers.Serializer):
     preferences = NotificationPreferenceUpdateItemSerializer(many=True)
+
+
+class NotificationReplayResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    notification_id = serializers.UUIDField()
