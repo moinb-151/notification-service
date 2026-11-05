@@ -62,11 +62,13 @@ class Command(BaseCommand):
                 return
 
             except pika.exceptions.AMQPError as exc:
-                logger.warning(
-                    "RabbitMQ topology initialization attempt %s/5 failed: %s",
+                logger.exception(
+                    "RabbitMQ topology initialization attempt %s/5 failed. "
+                    "Exception type: %s",
                     attempt,
-                    exc,
+                    type(exc).__name__,
                 )
+                
                 if attempt == 5:
                     raise CommandError(
                         "RabbitMQ topology initialization failed after 5 attempts. "
