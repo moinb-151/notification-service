@@ -261,6 +261,8 @@ def notification_stream(request):
     channel = f"notification:user:{user_id}"
 
     def event_stream():
+        yield ": stream-started\n\n"
+
         pubsub = RedisTransport._client.pubsub()
         recovered_ids = set()
 
