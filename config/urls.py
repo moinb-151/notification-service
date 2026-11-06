@@ -17,7 +17,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import include, path
-from .views import health_check
+from .views import health_check, sse_probe
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -27,6 +27,7 @@ from drf_spectacular.views import (
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health_check),
+    path("__sse_probe__/", sse_probe),
     path("users/", include("apps.users.urls")),
     path("orders/", include("apps.orders.urls")),
     path("notifications/", include("apps.notifications.urls")),
