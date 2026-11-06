@@ -5,6 +5,9 @@ from ..exceptions import (
     TransientNotificationProviderError,
     PermanentNotificationProviderError,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SMSProvider:
@@ -52,7 +55,19 @@ class SMSProvider:
             ) from exc
 
         except requests.HTTPError as exc:
-            status_code = exc.response.status_code
+            response = exc.response
+            status_code = response.status_code
+
+            try:
+                error_data = response.json()
+            except ValueError:
+                error_data = response.text
+
+            logger.error(
+                "Fast2SMS request failed. Status: %s, Response: %s",
+                status_code,
+                error_data,
+            )
 
             if status_code == 429 or status_code >= 500:
                 raise TransientNotificationProviderError(
@@ -60,5 +75,5 @@ class SMSProvider:
                 ) from exc
 
             raise PermanentNotificationProviderError(
-                f"Fast2SMS returned HTTP {status_code}."
+                f"Fast2SMS returned HTTP {status_code}: {error_data}"
             ) from exc
