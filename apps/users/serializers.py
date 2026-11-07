@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from time import perf_counter
 
 from .models import User
 
@@ -37,10 +38,22 @@ class PublicUserSerializer(serializers.ModelSerializer):
 
 class LoginSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
+        start = perf_counter()
+
         data = super().validate(attrs)
+        auth_time = perf_counter()
+
         user_data = UserRegistrationSerializer(self.user).data
-        message = "Login successfull"
-        data.update({"message": message, "user": user_data})
+        serialization_time = perf_counter()
+
+        data.update({
+            "message": "Login successful",
+            "user": user_data,
+        })
+
+        print(f"Authentication + token generation: {auth_time - start:.3f}s")
+        print(f"User serialization: {serialization_time - auth_time:.3f}s")
+
         return data
 
 
