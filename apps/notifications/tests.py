@@ -1,12 +1,14 @@
 import json
 import uuid
 from unittest.mock import patch
+from unittest.mock import AsyncMock
 
 from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
+from asgiref.sync import sync_to_async
 
 from rest_framework import response, status
 from rest_framework.test import APIClient
@@ -525,9 +527,7 @@ class InAppProviderTests(TestCase):
     @patch.object(
         RedisTransport, "publish", side_effect=TimeoutError("Redis timeout error")
     )
-    def test_in_app_provider_raises_transient_error_on_timeout(
-        self, mock_publish
-    ):
+    def test_in_app_provider_raises_transient_error_on_timeout(self, mock_publish):
         notification = Notification.objects.create(
             user=self.user,
             channel=ChannelType.IN_APP,
@@ -682,11 +682,11 @@ class NotificationServiceTests(TestCase):
 
     def test_malformed_notification_id_raises_validation_error(self):
         with self.assertRaises(ValidationError):
-                NotificationService.get_notifications_after(
-                    self.user,
-                    "not-a-valid-uuid",
-                    ChannelType.IN_APP,
-                )
+            NotificationService.get_notifications_after(
+                self.user,
+                "not-a-valid-uuid",
+                ChannelType.IN_APP,
+            )
 
 
 class NotificationStreamTests(TestCase):
@@ -713,13 +713,13 @@ class NotificationStreamTests(TestCase):
             ),
         )
 
-    @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_replay_missed_notifications(self, mock_pubsub_method):
+    @patch("apps.notifications.views.RedisTransport._async_client.pubsub")
+    async def test_replay_missed_notifications(self, mock_pubsub_method):
         notifications = []
 
         for i in range(3):
             notifications.append(
-                Notification.objects.create(
+                await Notification.objects.acreate(
                     user=self.user,
                     channel=ChannelType.IN_APP,
                     event_type=NotificationEventType.TEST_NOTIFICATION,
@@ -730,23 +730,27 @@ class NotificationStreamTests(TestCase):
             )
 
         mock_pubsub = mock_pubsub_method.return_value
-        mock_pubsub.get_message.side_effect = RuntimeError("Stop SSE test")
+
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.get_message = AsyncMock(
+            side_effect=RuntimeError("Stop SSE test")
+        )
+        mock_pubsub.aclose = AsyncMock()
 
         token = AccessToken.for_user(self.user)
-
-        self.client.cookies["access_token"] = str(token)
+        self.async_client.cookies["access_token"] = str(token)
 
         last_event_id = str(notifications[0].id)
 
-        response = self.client.get(
+        response = await self.async_client.get(
             self.url,
-            HTTP_LAST_EVENT_ID=last_event_id,
+            headers={"Last-Event-ID": last_event_id},
         )
 
         chunks = []
 
         try:
-            for chunk in response.streaming_content:
+            async for chunk in response.streaming_content:
                 chunks.append(chunk.decode("utf-8"))
         except RuntimeError as exc:
             self.assertEqual(str(exc), "Stop SSE test")
@@ -765,15 +769,15 @@ class NotificationStreamTests(TestCase):
         self.assertIn("event: notification", stream)
 
     @patch("apps.notifications.views.NotificationService.get_notifications_after")
-    @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_recovery_deduplicates_live_notification(
+    @patch("apps.notifications.views.RedisTransport._async_client.pubsub")
+    async def test_recovery_deduplicates_live_notification(
         self, mock_pubsub_method, mock_get_notifications_after
     ):
         notifications = []
 
         for i in range(2):
             notifications.append(
-                Notification.objects.create(
+                await Notification.objects.acreate(
                     user=self.user,
                     channel=ChannelType.IN_APP,
                     event_type=NotificationEventType.TEST_NOTIFICATION,
@@ -783,7 +787,7 @@ class NotificationStreamTests(TestCase):
                 )
             )
 
-        new_notification = Notification.objects.create(
+        new_notification = await Notification.objects.acreate(
             user=self.user,
             channel=ChannelType.IN_APP,
             event_type=NotificationEventType.TEST_NOTIFICATION,
@@ -793,6 +797,10 @@ class NotificationStreamTests(TestCase):
         )
 
         mock_pubsub = mock_pubsub_method.return_value
+        
+        mock_pubsub.subscribe = AsyncMock()
+    
+        mock_pubsub.aclose = AsyncMock()
         mock_get_notifications_after.return_value = [notifications[1]]
 
         duplicate_message = {
@@ -821,27 +829,30 @@ class NotificationStreamTests(TestCase):
             ),
         }
 
-        mock_pubsub.get_message.side_effect = [
-            duplicate_message,
-            new_message,
-            RuntimeError("Stop SSE test"),
-        ]
+        mock_pubsub.get_message = AsyncMock(
+            side_effect=[
+                duplicate_message,
+                new_message,
+                RuntimeError("Stop SSE test"),
+            ]
+        )
+        mock_pubsub.aclose = AsyncMock()
 
         token = AccessToken.for_user(self.user)
 
-        self.client.cookies["access_token"] = str(token)
+        self.async_client.cookies["access_token"] = str(token)
 
         last_event_id = str(notifications[0].id)
 
-        response = self.client.get(
+        response = await self.async_client.get(
             self.url,
-            HTTP_LAST_EVENT_ID=last_event_id,
+            headers={"Last-Event-ID": last_event_id},
         )
 
         chunks = []
 
         try:
-            for chunk in response.streaming_content:
+            async for chunk in response.streaming_content:
                 chunks.append(chunk.decode("utf-8"))
         except RuntimeError as exc:
             self.assertEqual(str(exc), "Stop SSE test")
@@ -859,14 +870,14 @@ class NotificationStreamTests(TestCase):
             1,
         )
 
-    @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_stream_channel_filtering(self, mock_pubsub_method):
+    @patch("apps.notifications.views.RedisTransport._async_client.pubsub")
+    async def test_stream_channel_filtering(self, mock_pubsub_method):
 
         notifications = []
 
         for i in range(3):
             notifications.append(
-                Notification.objects.create(
+                await Notification.objects.acreate(
                     user=self.user,
                     channel=ChannelType.EMAIL if i == 1 else ChannelType.IN_APP,
                     event_type=NotificationEventType.TEST_NOTIFICATION,
@@ -877,23 +888,28 @@ class NotificationStreamTests(TestCase):
             )
 
         mock_pubsub = mock_pubsub_method.return_value
-        mock_pubsub.get_message.side_effect = RuntimeError("Stop SSE test")
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.aclose = AsyncMock()
+        mock_pubsub.get_message = AsyncMock(
+            side_effect=RuntimeError("Stop SSE test")
+        )
+        mock_pubsub.aclose = AsyncMock()
 
         token = AccessToken.for_user(self.user)
 
-        self.client.cookies["access_token"] = str(token)
+        self.async_client.cookies["access_token"] = str(token)
 
         last_event_id = str(notifications[0].id)
 
-        response = self.client.get(
+        response = await self.async_client.get(
             self.url,
-            HTTP_LAST_EVENT_ID=last_event_id,
+            headers={"Last-Event-ID": last_event_id},
         )
 
         chunks = []
 
         try:
-            for chunk in response.streaming_content:
+            async for chunk in response.streaming_content:
                 chunks.append(chunk.decode("utf-8"))
         except RuntimeError as exc:
             self.assertEqual(str(exc), "Stop SSE test")
@@ -905,23 +921,26 @@ class NotificationStreamTests(TestCase):
         self.assertIn(str(notifications[2].id), stream)
 
     @patch("apps.notifications.views.NotificationService.get_notifications_after")
-    @patch("apps.notifications.views.RedisTransport._client.pubsub")
-    def test_stream_with_no_last_event_id(
+    @patch("apps.notifications.views.RedisTransport._async_client.pubsub")
+    async def test_stream_with_no_last_event_id(
         self, mock_pubsub_method, mock_get_notifications_after
     ):
         mock_pubsub = mock_pubsub_method.return_value
-        mock_pubsub.get_message.side_effect = RuntimeError("Stop SSE test")
+
+        mock_pubsub.subscribe = AsyncMock()
+        mock_pubsub.get_message = AsyncMock(side_effect=RuntimeError("Stop SSE test"))
+        mock_pubsub.aclose = AsyncMock()
 
         token = AccessToken.for_user(self.user)
 
-        self.client.cookies["access_token"] = str(token)
+        self.async_client.cookies["access_token"] = str(token)
 
-        response = self.client.get(self.url)
+        response = await self.async_client.get(self.url)
 
         chunks = []
 
         try:
-            for chunk in response.streaming_content:
+            async for chunk in response.streaming_content:
                 chunks.append(chunk.decode("utf-8"))
         except RuntimeError as exc:
             self.assertEqual(str(exc), "Stop SSE test")
