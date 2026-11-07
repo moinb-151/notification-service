@@ -30,6 +30,7 @@ from common.choices import ChannelType
 from common.serializers import ErrorDetailSerializer
 
 from .transport.redis import RedisTransport
+from asgiref.sync import sync_to_async
 
 from ..users.authentication import CustomJWTAuthentication
 from .models import NotificationEventType, NotificationStatus
@@ -238,6 +239,17 @@ class NotificationPreferenceView(APIView):
         )
 
 
+get_notifications_after_async = sync_to_async(
+    lambda **kwargs: list(NotificationService.get_notifications_after(**kwargs)),
+    thread_sensitive=True,
+)
+
+get_template_async = sync_to_async(
+    NotificationTemplateService.get_template,
+    thread_sensitive=True,
+)
+
+
 def notification_stream(request):
     authentication = CustomJWTAuthentication()
     last_event_id = request.headers.get("Last-Event-ID")
@@ -260,24 +272,22 @@ def notification_stream(request):
     user_id = user.id
     channel = f"notification:user:{user_id}"
 
-    def event_stream():
-        yield ": stream-started\n\n"
-
-        pubsub = RedisTransport._client.pubsub()
+    async def event_stream():
+        pubsub = RedisTransport._async_client.pubsub()
         recovered_ids = set()
 
         try:
-            pubsub.subscribe(channel)
+            await pubsub.subscribe(channel)
 
             if last_event_id:
-                missed_notifications = NotificationService.get_notifications_after(
+                missed_notifications = await get_notifications_after_async(
                     user=user,
                     last_event_id=last_event_id,
                     channel=ChannelType.IN_APP,
                 )
 
                 for missed_notification in missed_notifications:
-                    template = NotificationTemplateService.get_template(
+                    template = await get_template_async(
                         event_type=missed_notification.event_type,
                         channel=missed_notification.channel,
                     )
@@ -308,7 +318,7 @@ def notification_stream(request):
                     )
 
             while True:
-                message = pubsub.get_message(
+                message = await pubsub.get_message(
                     ignore_subscribe_messages=True,
                     timeout=15,
                 )
@@ -329,7 +339,7 @@ def notification_stream(request):
                 )
 
         finally:
-            pubsub.close()
+            await pubsub.aclose()
 
     response = StreamingHttpResponse(
         event_stream(),
@@ -364,7 +374,7 @@ class NotificationStreamView(APIView):
                     "Server-Sent Events stream. Each notification is sent as an "
                     "`id`, `event: notification`, and JSON `data` field; heartbeat "
                     "comments are sent while idle."
-                )
+                ),
             ),
             (401, "application/json"): ErrorDetailSerializer,
         },
